@@ -82,7 +82,7 @@ func (prisonBackend *prisonBackend) Create(containerSpec garden.ContainerSpec) (
 		handle = containerSpec.Handle
 	}
 
-	container := container.NewContainer(id, handle, prisonBackend.containerRootPath)
+	container := container.NewContainer(id, handle, prisonBackend.containerRootPath, prisonBackend.logger)
 
 	prisonBackend.containersMutex.Lock()
 	prisonBackend.containers[handle] = container

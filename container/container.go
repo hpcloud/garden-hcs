@@ -1,7 +1,9 @@
 package container
 
 import (
+	"fmt"
 	"io"
+	"net"
 	"net/rpc"
 	"path"
 	"path/filepath"
@@ -39,13 +41,13 @@ func NewContainer(id, handle string, rootPath string, logger lager.Logger) *cont
 	iUcontainer, errr := oleutil.CreateObject("CloudFoundry.WindowsPrison.ComWrapper.Container")
 
 	if errr != nil {
-		logger.Error(errr)
+		logger.Fatal("Error creating the COM object for the prison", errr)
 	}
 	defer iUcontainer.Release()
 
 	iDcontainer, errr := iUcontainer.QueryInterface(ole.IID_IDispatch)
 	if errr != nil {
-		logger.Fatal(errr)
+		logger.Fatal("Error trying to query COM interface", errr)
 	}
 
 	return &container{
@@ -88,16 +90,16 @@ func (container *container) Stop(kill bool) error {
 
 	isLocked, errr := oleutil.CallMethod(container.prison, "IsLockedDown")
 	if errr != nil {
-		container.logger.Error(errr)
+		container.logger.Error("Error trying to retrieve prison lockdown status", errr)
 	}
 	defer isLocked.Clear()
 	blocked := isLocked.Value().(bool)
 
 	if blocked == true {
-		container.logger.Info("Stop with kill", kill)
+		container.logger.Info(fmt.Sprintf("Stop with kill", kill))
 		_, errr = oleutil.CallMethod(container.prison, "Stop")
 		if errr != nil {
-			container.logger.Error(errr)
+			container.logger.Error("Error trying to stop prison", errr)
 		}
 
 		if kill == true {
@@ -120,15 +122,15 @@ func (container *container) Info() (garden.ContainerInfo, error) {
 //
 // Errors:
 // *  TODO.
-func (container *container) StreamIn(dstPath string, tarStream io.Reader) error {
-	container.logger.Info("StreamIn dstPath:", dstPath)
+func (container *container) StreamIn(dstPath string, source io.Reader) error {
+	container.logger.Info(fmt.Sprintf("StreamIn dstPath:", dstPath))
 
 	absDestPath := path.Join(container.rootPath, container.handle, dstPath)
-	container.logger.Info("Streaming in to file: ", absDestPath)
+	container.logger.Info(fmt.Sprintf("Streaming in to file: ", absDestPath))
 
 	err := os.MkdirAll(absDestPath, 0777)
 	if err != nil {
-		container.logger.Error(err)
+		container.logger.Error("Error trying to create destination path for in-stream", err)
 	}
 
 	tarPath := "C:\\Program Files (x86)\\Git\\bin\\tar.exe"
@@ -150,7 +152,7 @@ func (container *container) StreamIn(dstPath string, tarStream io.Reader) error 
 
 	err = cmd.Run()
 	if err != nil {
-		container.logger.Error(err)
+		container.logger.Error("Error trying to run tar for in-stream", err)
 	}
 
 	return err
@@ -161,7 +163,7 @@ func (container *container) StreamIn(dstPath string, tarStream io.Reader) error 
 // Errors:
 // * TODO.
 func (container *container) StreamOut(srcPath string) (io.ReadCloser, error) {
-	container.logger.Info("StreamOut srcPath:", srcPath)
+	container.logger.Info(fmt.Sprintf("StreamOut srcPath:", srcPath))
 
 	containerPath := path.Join(container.rootPath, container.handle)
 
@@ -209,23 +211,23 @@ func (container *container) StreamOut(srcPath string) (io.ReadCloser, error) {
 
 // Limits the network bandwidth for a container.
 func (container *container) LimitBandwidth(limits garden.BandwidthLimits) error {
-	log.Println("TODO LimitBandwidth")
+	container.logger.Info("TODO LimitBandwidth")
 	return nil
 }
 
 func (container *container) CurrentBandwidthLimits() (garden.BandwidthLimits, error) {
-	log.Println("TODO CurrentBandwidthLimits")
+	container.logger.Info("TODO CurrentBandwidthLimits")
 	return garden.BandwidthLimits{}, nil
 }
 
 // Limits the CPU shares for a container.
 func (container *container) LimitCPU(limits garden.CPULimits) error {
-	log.Println("TODO LimitCPU")
+	container.logger.Info("TODO LimitCPU")
 	return nil
 }
 
 func (container *container) CurrentCPULimits() (garden.CPULimits, error) {
-	log.Println("TODO CurrentCPULimits")
+	container.logger.Info("TODO CurrentCPULimits")
 	return garden.CPULimits{}, nil
 }
 
@@ -236,12 +238,12 @@ func (container *container) CurrentCPULimits() (garden.CPULimits, error) {
 //
 // TODO: explain how disk management works.
 func (container *container) LimitDisk(limits garden.DiskLimits) error {
-	log.Println("TODO LimitDisk")
+	container.logger.Info("TODO LimitDisk")
 	return nil
 }
 
 func (container *container) CurrentDiskLimits() (garden.DiskLimits, error) {
-	log.Println("TODO CurrentDiskLimits")
+	container.logger.Info("TODO CurrentDiskLimits")
 	return garden.DiskLimits{}, nil
 }
 
@@ -253,12 +255,12 @@ func (container *container) CurrentDiskLimits() (garden.DiskLimits, error) {
 // Errors:
 // * The kernel does not support setting memory.memsw.limit_in_bytes.
 func (container *container) LimitMemory(limits garden.MemoryLimits) error {
-	log.Println("TODO LimitMemory")
+	container.logger.Info("TODO LimitMemory")
 	return nil
 }
 
 func (container *container) CurrentMemoryLimits() (garden.MemoryLimits, error) {
-	log.Println("TODO CurrentMemoryLimits")
+	container.logger.Info("TODO CurrentMemoryLimits")
 	return garden.MemoryLimits{}, nil
 }
 
@@ -276,7 +278,7 @@ func (container *container) CurrentMemoryLimits() (garden.MemoryLimits, error) {
 // Errors:
 // * When no port can be acquired from the server's port pool.
 func (container *container) NetIn(hostPort, containerPort uint32) (uint32, uint32, error) {
-	log.Println("TODO NetIn", hostPort, containerPort)
+	container.logger.Info(fmt.Sprintf("TODO NetIn", hostPort, containerPort))
 	freePort := freeTcp4Port()
 	container.lastNetInPort = freePort
 	return freePort, containerPort, nil
@@ -303,12 +305,12 @@ func (container *container) NetOut(netOutRule garden.NetOutRule) error {
 //
 // Errors:
 // * TODO.
-func (container *container) Run(garden.ProcessSpec, garden.ProcessIO) (garden.Process, error) {
+func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (garden.Process, error) {
 	container.runMutex.Lock()
 	defer container.runMutex.Unlock()
 	// ole.CoInitializeEx(0, ole.COINIT_MULTITHREADED)
 
-	log.Println("Run command: ", spec.Path, spec.Args, spec.Dir, spec.Privileged, spec.Env)
+	container.logger.Info(fmt.Sprintf("Run command: ", spec.Path, spec.Args, spec.Dir, spec.Privileged, spec.Env))
 
 	cmdPath := "C:\\Windows\\System32\\cmd.exe"
 	rootPath := path.Join(container.rootPath, container.handle)
@@ -327,7 +329,7 @@ func (container *container) Run(garden.ProcessSpec, garden.ProcessIO) (garden.Pr
 	cri, err := prison_client.CreateContainerRunInfo()
 	defer cri.Release()
 	if err != nil {
-		log.Println(err)
+		container.logger.Error("Error trying to create ContainerRunInfo for a prison", err)
 		return nil, err
 	}
 
@@ -344,7 +346,7 @@ func (container *container) Run(garden.ProcessSpec, garden.ProcessIO) (garden.Pr
 	spec.Path = strings.Replace(spec.Path, "/", "\\", -1)
 
 	concatArgs = " /c " + spec.Path + " " + concatArgs
-	log.Println("Filename ", spec.Path, "Arguments: ", concatArgs, "Concat Args: ", concatArgs)
+	container.logger.Info(fmt.Sprintf("Filename ", spec.Path, "Arguments: ", concatArgs, "Concat Args: ", concatArgs))
 
 	cri.SetFilename(cmdPath)
 	cri.SetArguments(concatArgs)
@@ -365,35 +367,35 @@ func (container *container) Run(garden.ProcessSpec, garden.ProcessIO) (garden.Pr
 	}
 
 	go func() {
-		log.Println("Streaming stdout ", stdoutReader)
+		container.logger.Info(fmt.Sprintf("Streaming stdout ", stdoutReader))
 
 		io.Copy(pio.Stdout, stdoutReader)
 		stdoutReader.Close()
 
-		log.Println("Stdout pipe closed", stdoutReader)
+		container.logger.Info(fmt.Sprintf("Stdout pipe closed", stdoutReader))
 	}()
 
 	go func() {
-		log.Println("Streaming stderr ", stderrReader)
+		container.logger.Info(fmt.Sprintf("Streaming stderr ", stderrReader))
 
 		io.Copy(pio.Stderr, stderrReader)
 		stderrReader.Close()
 
-		log.Println("Stderr pipe closed", stderrReader)
+		container.logger.Info(fmt.Sprintf("Stderr pipe closed", stderrReader))
 	}()
 
 	go func() {
-		log.Println("Streaming stdin ", stdinWriter)
+		container.logger.Info(fmt.Sprintf("Streaming stdin ", stdinWriter))
 
 		io.Copy(stdinWriter, pio.Stdin)
 		stdinWriter.Close()
 
-		log.Println("Stdin pipe closed", stdinWriter)
+		container.logger.Info(fmt.Sprintf("Stdin pipe closed", stdinWriter))
 	}()
 
 	isLocked, errr := oleutil.CallMethod(container.prison, "IsLockedDown")
 	if errr != nil {
-		log.Println(errr)
+		container.logger.Error("Error trying to retrieve prison lock-down status", errr)
 	}
 	defer isLocked.Clear()
 	blocked := isLocked.Value().(bool)
@@ -403,22 +405,22 @@ func (container *container) Run(garden.ProcessSpec, garden.ProcessIO) (garden.Pr
 		oleutil.PutProperty(container.prison, "HomePath", rootPath)
 		// oleutil.PutProperty(container, "MemoryLimitBytes", 1024*1024*300)
 
-		log.Println("Locking down...")
+		container.logger.Info("Locking down...")
 		_, errr = oleutil.CallMethod(container.prison, "Lockdown")
 		if errr != nil {
-			log.Println(errr)
+			container.logger.Error("Error trying to lock prison down", errr)
 			return nil, errr
 		}
-		log.Println("Locked down.")
+		container.logger.Info("Locked down.")
 	}
 
-	log.Println("Running process...")
+	container.logger.Info("Running process...")
 	iDcri, _ := cri.GetIDispatch()
 	defer iDcri.Release()
 	ptrackerRes, errr := oleutil.CallMethod(container.prison, "Run", iDcri)
 
 	if errr != nil {
-		log.Println(errr)
+		container.logger.Error("Error trying to run process in prison", errr)
 		return nil, errr
 	}
 	defer ptrackerRes.Clear()
@@ -436,29 +438,31 @@ func (container *container) Run(garden.ProcessSpec, garden.ProcessIO) (garden.Pr
 // Errors:
 // * processID does not refer to a running process.
 func (container *container) Attach(processID uint32, io garden.ProcessIO) (garden.Process, error) {
-	log.Println("Attaching to: ", processID)
+	container.logger.Info(fmt.Sprintf("Attaching to: ", processID))
 
 	cmd := container.pids[int(processID)]
 
 	return cmd, nil
 }
 
-// Metrics returns the current set of metrics for a container
-func (container *container) Metrics() (garden.Metrics, error) {
+//// Metrics returns the current set of metrics for a container
+//func (container *container) Metrics() (garden.Metrics, error) {
 
-}
+//}
 
 // Properties returns the current set of properties
 func (container *container) Properties() (garden.Properties, error) {
-
+	container.logger.Info("TODO: implement Properties()")
+	return nil, nil
 }
 
 // Property returns the value of the property with the specified name.
 //
 // Errors:
 // * When the property does not exist on the container.
-func (container *container) Property(name string) (string, error) {
-
+func (container *container) GetProperty(name string) (string, error) {
+	container.logger.Info("TODO: implement Property()")
+	return "", nil
 }
 
 // Set a named property on a container to a specified value.
@@ -466,7 +470,8 @@ func (container *container) Property(name string) (string, error) {
 // Errors:
 // * None.
 func (container *container) SetProperty(name string, value string) error {
-
+	container.logger.Info("TODO: implement SetProperty()")
+	return nil
 }
 
 // Remove a property with the specified name from a container.
@@ -474,7 +479,8 @@ func (container *container) SetProperty(name string, value string) error {
 // Errors:
 // * None.
 func (container *container) RemoveProperty(name string) error {
-
+	container.logger.Info("TODO: implement RemoveProperty()")
+	return nil
 }
 
 func (container *container) destroy() error {
@@ -482,20 +488,20 @@ func (container *container) destroy() error {
 
 	isLocked, errr := oleutil.CallMethod(container.prison, "IsLockedDown")
 	if errr != nil {
-		log.Println(errr)
+		container.logger.Error("Error trying to retrive prison lock-down status", errr)
 	}
 	defer isLocked.Clear()
 	blocked := isLocked.Value().(bool)
 
 	if blocked == true {
 
-		log.Println("Invoking destory on prison")
+		container.logger.Info("Invoking destory on prison")
 		_, errr = oleutil.CallMethod(container.prison, "Destroy")
 		if errr != nil {
-			log.Println(errr)
+			container.logger.Error("Error trying to destroy prison", errr)
 			return errr
 		}
-		log.Println("Container destoryed: ", container.id)
+		container.logger.Info(fmt.Sprintf("Container destroyed: ", container.id))
 	}
 	return nil
 }
