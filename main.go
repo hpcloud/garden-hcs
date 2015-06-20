@@ -24,34 +24,39 @@ var containerizerURL = flag.String(
 )
 
 func main() {
-	defaultListNetwork := "unix"
-	defaultListAddr := "/tmp/garden.sock"
+	defaultListNetwork := "tcp"
+	defaultListAddr := "0.0.0.0:58008"
+
 	if os.Getenv("PORT") != "" {
 		defaultListNetwork = "tcp"
 		defaultListAddr = "0.0.0.0:" + os.Getenv("PORT")
 	}
+
 	var listenNetwork = flag.String(
 		"listenNetwork",
 		defaultListNetwork,
 		"how to listen on the address (unix, tcp, etc.)",
 	)
+
 	var listenAddr = flag.String(
 		"listenAddr",
 		defaultListAddr,
 		"address to listen on",
 	)
+
 	cf_lager.AddFlags(flag.CommandLine)
 	flag.Parse()
 
 	logger, _ := cf_lager.New("garden-windows")
+	logger.Info("Pelerinul e viu")
 
-	netBackend, err := backend.NewDotNetBackend(*containerizerURL, logger)
+	prisonBackend, err := backend.NewPrisonBackend("c:\\workspace\\prison", logger)
 	if err != nil {
 		logger.Fatal("Server Failed to Start", err)
 		os.Exit(1)
 	}
 
-	gardenServer := server.New(*listenNetwork, *listenAddr, *containerGraceTime, netBackend, logger)
+	gardenServer := server.New(*listenNetwork, *listenAddr, *containerGraceTime, prisonBackend, logger)
 	err = gardenServer.Start()
 	if err != nil {
 		logger.Fatal("Server Failed to Start", err)

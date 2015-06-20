@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!--
+  Available Targets:
+
+  /t:RestoreNugetPackages
+    Restores nuget packages
+  
+  /t:GatherPackages
+    Creates a bin directoy and copies all Prison binaries in it
+    
+  /t:GetGoHacks
+    Installs go packages used whilst hacking on the code base
+  -->
+
+  <PropertyGroup>
+    <!-- Directory containing this .proj file -->
+    <ProjectRoot>$(MSBuildThisFileDirectory)</ProjectRoot>
+
+    <!-- Path to the packages.config file -->
+    <PackagesConfigFile>&quot;$(ProjectRoot)\prison\packages.config&quot;</PackagesConfigFile>
+
+    <!-- Path to where the nuget packages get restored -->
+    <NugetPackagesDirNoQuotes>$(ProjectRoot)\prison\packages</NugetPackagesDirNoQuotes>
+    <NugetPackagesDir>&quot;$(NugetPackagesDirNoQuotes)&quot;</NugetPackagesDir>
+
+    <!-- Extra nuget server to use when downloading packages -->
+    <NugetRepo>http://nuget.15.126.229.131.xip.io/nuget</NugetRepo>
+
+    <!-- Path to nuget.exe -->
+    <NuGetCommand>&quot;$(ProjectRoot)\prison\.nuget\nuget.exe&quot;</NuGetCommand>
+
+    <!-- Path to where all prison assemblies and dependencies get copied -->
+    <BinDirNoQuotes>$(ProjectRoot)\prison\bin\</BinDirNoQuotes>
+    <BinDir>&quot;$(BinDirNoQuotes)&quot;</BinDir>
+  </PropertyGroup>
+
+
+  <!-- Target for restoring nuget packages -->
+  <Target Name="RestoreNugetPackages">
+    <RemoveDir Directories="$(NugetPackagesDirNoQuotes)" />
+    <Exec Command="$(NuGetCommand) restore $(PackagesConfigFile) -source $(NugetRepo) -PackagesDirectory $(NugetPackagesDir)"/>
+  </Target>
+
+  <!-- Target for creating the bin directory with all required prison assemblies and artifacts -->
+  <Target Name="GatherAssemblies" DependsOnTargets="RestoreNugetPackages">
+    <RemoveDir Directories="$(BinDirNoQuotes)" />
+    <MakeDir Directories="$(BinDirNoQuotes)"/>
+
+    <ItemGroup>
+      <Artifacts Include="$(NugetPackagesDirNoQuotes)\windows-prison*\lib\net45\*" />
+      <Artifacts Include="$(NugetPackagesDirNoQuotes)\windows-prison*\Content\*" />
+      <Artifacts Include="$(NugetPackagesDirNoQuotes)\alphafs*\lib\net45\*" />
+      <Artifacts Include="$(NugetPackagesDirNoQuotes)\ini.net*\lib\net20\*" />
+      <Artifacts Include="$(NugetPackagesDirNoQuotes)\nlog*\net45\*" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(Artifacts)" DestinationFolder="$(BinDirNoQuotes)" />
+    <Message Text="Prison assemblies copied to $(BinDir)" />
+  </Target>
+
+  <!-- Target for installing go packages that aren't in the diego-release (yet) -->
+  <Target Name="GetGoHacks">
+    <ItemGroup>
+      <Packages Include="github.com/go-ole/go-ole" />
+      <Packages Include="github.com/natefinch/npipe" />
+    </ItemGroup>
+
+    <Exec Command="go get %(Packages.identity)"/>
+  </Target>
+</Project>
