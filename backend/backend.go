@@ -11,7 +11,7 @@ import (
 
 	"github.com/cloudfoundry-incubator/garden"
 	"github.com/cloudfoundry-incubator/garden-windows/container"
-	"github.com/mattn/go-ole"
+	"github.com/go-ole/go-ole"
 	"github.com/pivotal-golang/lager"
 )
 
