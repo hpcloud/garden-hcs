@@ -1,0 +1,14 @@
+{
+  "etcdCluster": "http://etcd.service.dc1.consul:4001",
+  "consulCluster": "http://127.0.0.1:8500",
+  "gardenListenNetwork": "tcp",
+  "gardenListenAddr": "0.0.0.0:58008",
+  "gardenLogLevel": "info",
+  "consulServerIp": "127.0.0.1",
+  "repCellID": "$LATTICE_CELL_ID",
+  "repZone": "z1",
+  "repMemoryMB": "auto",
+  "repDiskMB": "auto",
+  "repListenAddr": "0.0.0.0:1700",
+  "repRootFSProvider": "prison"
+}

@@ -124,10 +124,8 @@
     <Delete Files="$(ConsulZipFile)" />
   </Target>
 
-
+  <!-- List of GO projects that are part of a Windows Diego Cell -->
   <ItemGroup>
-    <!--auctioneer  consul  converger  garden-linux  metron  rep  tee2metron-->
-
     <DiegoProj Include="$(GOPATH)\src\github.com\cloudfoundry-incubator\rep\cmd\rep">
       <Artifact>rep.exe</Artifact>
     </DiegoProj>
@@ -145,10 +143,32 @@
     </DiegoProj>
   </ItemGroup>
 
-  <!-- Target for building the other diego projects -->
+  <!-- Target for building the GO projects that make up a diego cell -->
   <Target Name="BuildDiegoComponents" Outputs="%(DiegoProj.Artifact)" AfterTargets="AssembleDiego">
     <Message Importance="high" Text="Building %(DiegoProj.Artifact) ..." />
     <Exec WorkingDirectory="%(DiegoProj.Identity)" Command="go build" />
     <Copy SourceFiles="%(DiegoProj.Identity)\%(DiegoProj.Artifact)" DestinationFolder="$(DiegoArtifactsDir)" />
+  </Target>
+
+  <!-- List of scripts and configuration files that need to be a part of a Diego cell -->
+  <ItemGroup>
+    <DiegoFile Include="$(ProjectRoot)\lattice\diego-dev-ctl.ps1">
+      <ArtifactDestinationDir>$(DiegoArtifactsDir)</ArtifactDestinationDir>
+    </DiegoFile>
+    
+    <DiegoFile Include="$(ProjectRoot)\lattice\config\consul.json">
+      <ArtifactDestinationDir>$(DiegoArtifactsDir)\config</ArtifactDestinationDir>
+    </DiegoFile>
+    
+    <DiegoFile Include="$(ProjectRoot)\lattice\config\windows-lattice.json">
+      <ArtifactDestinationDir>$(DiegoArtifactsDir)\config</ArtifactDestinationDir>
+    </DiegoFile>
+  </ItemGroup>
+
+  <!-- Target for copying scripts and configuration files for a Diego cell -->
+  <Target Name="CopyDiegoScriptsAndConfigs" Outputs="%(DiegoProj.Identity)" AfterTargets="AssembleDiego">
+    <Message Importance="high" Text="Copying %(DiegoFile.Identity) ..." />
+    <MakeDir Directories="%(DiegoFile.ArtifactDestinationDir)" />
+    <Copy SourceFiles="%(DiegoFile.Identity)" DestinationFolder="%(DiegoFile.ArtifactDestinationDir)" />
   </Target>
 </Project>

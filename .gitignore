@@ -3,3 +3,7 @@ garden-windows.exe
 /prison/msbuild
 /bin
 /gin-bin
+/lattice/consul_data
+/lattice/logs
+/lattice/pids
+
