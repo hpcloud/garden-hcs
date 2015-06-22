@@ -310,7 +310,7 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 	defer container.runMutex.Unlock()
 	// ole.CoInitializeEx(0, ole.COINIT_MULTITHREADED)
 
-	container.logger.Info(fmt.Sprintf("Run command: ", spec.Path, spec.Args, spec.Dir, spec.Privileged, spec.Env))
+	container.logger.Info(fmt.Sprintf("Run command: ", spec.Path, spec.Args, spec.Dir, spec.User, spec.Env))
 
 	cmdPath := "C:\\Windows\\System32\\cmd.exe"
 	rootPath := path.Join(container.rootPath, container.handle)
@@ -445,10 +445,15 @@ func (container *container) Attach(processID uint32, io garden.ProcessIO) (garde
 	return cmd, nil
 }
 
-//// Metrics returns the current set of metrics for a container
-//func (container *container) Metrics() (garden.Metrics, error) {
-
-//}
+// Metrics returns the current set of metrics for a container
+func (container *container) Metrics() (garden.Metrics, error) {
+	container.logger.Info("TODO: implement Metrics()")
+	return garden.Metrics{
+		MemoryStat: garden.ContainerMemoryStat{},
+		CPUStat:    garden.ContainerCPUStat{},
+		DiskStat:   garden.ContainerDiskStat{},
+	}, nil
+}
 
 // Properties returns the current set of properties
 func (container *container) Properties() (garden.Properties, error) {
@@ -460,7 +465,7 @@ func (container *container) Properties() (garden.Properties, error) {
 //
 // Errors:
 // * When the property does not exist on the container.
-func (container *container) GetProperty(name string) (string, error) {
+func (container *container) Property(name string) (string, error) {
 	container.logger.Info("TODO: implement Property()")
 	return "", nil
 }

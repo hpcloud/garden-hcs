@@ -126,12 +126,18 @@
 
 
   <ItemGroup>
+    <!--auctioneer  consul  converger  garden-linux  metron  rep  tee2metron-->
+
     <DiegoProj Include="$(GOPATH)\src\github.com\cloudfoundry-incubator\rep\cmd\rep">
       <Artifact>rep.exe</Artifact>
     </DiegoProj>
 
-    <DiegoProj Include="$(GOPATH)\src\github.com\cloudfoundry-incubator\executor\cmd\executor">
-      <Artifact>executor.exe</Artifact>
+    <DiegoProj Include="$(GOPATH)\src\github.com\cloudfoundry-incubator\auctioneer\cmd\auctioneer">
+      <Artifact>auctioneer.exe</Artifact>
+    </DiegoProj>
+
+    <DiegoProj Include="$(GOPATH)\src\github.com\cloudfoundry-incubator\converger\cmd\converger">
+      <Artifact>converger.exe</Artifact>
     </DiegoProj>
 
     <DiegoProj Include="$(GOPATH)\src\github.com\cloudfoundry-incubator\garden-windows">

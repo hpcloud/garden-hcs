@@ -110,6 +110,16 @@ func (prisonBackend *prisonBackend) Lookup(handle string) (garden.Container, err
 	return nil, nil
 }
 
+// BulkInfo returns info or error for a list of containers.
+func (prisonBackend *prisonBackend) BulkInfo(handles []string) (map[string]garden.ContainerInfoEntry, error) {
+	return nil, nil
+}
+
+// BulkMetrics returns metrics or error for a list of containers.
+func (prisonBackend *prisonBackend) BulkMetrics(handles []string) (map[string]garden.ContainerMetricsEntry, error) {
+	return nil, nil
+}
+
 func generateContainerIDs(ids chan<- string) string {
 	for containerNum := time.Now().UnixNano(); ; containerNum++ {
 		containerID := []byte{}
