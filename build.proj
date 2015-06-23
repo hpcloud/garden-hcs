@@ -32,7 +32,7 @@
     <NuGetCommand>&quot;$(ProjectRoot)\prison\.nuget\nuget.exe&quot;</NuGetCommand>
 
     <!-- Path to where all prison assemblies and dependencies get copied -->
-    <BinDirNoQuotes>$(ProjectRoot)\prison\bin\</BinDirNoQuotes>
+    <BinDirNoQuotes>$(ProjectRoot)prison\bin\</BinDirNoQuotes>
     <BinDir>&quot;$(BinDirNoQuotes)&quot;</BinDir>
     
     <!-- Path to regasm.exe -->
@@ -88,12 +88,12 @@
   <!-- Target for unregistering the COM Windows Prison -->
   <Target Name="UnregisterCOM">
     <Exec Condition="Exists('$(BinDir)\CloudFoundry.WindowsPrison.ComWrapper.dll')" 
-          Command="$(RegAsmCommand) &quot;$(BinDirNoQuotes)\CloudFoundry.WindowsPrison.ComWrapper.dll&quot; /unregister" />
+          Command="$(RegAsmCommand) &quot;$(BinDirNoQuotes)CloudFoundry.WindowsPrison.ComWrapper.dll&quot; /unregister" />
   </Target>
 
   <!-- Target for registering the COM Windows Prison -->
   <Target Name="RegisterCOM" DependsOnTargets="GatherAssemblies">
-    <Exec Command="$(RegAsmCommand) &quot;$(BinDirNoQuotes)\CloudFoundry.WindowsPrison.ComWrapper.dll&quot;" />
+    <Exec Command="$(RegAsmCommand) /verbose /tlb /codebase &quot;$(BinDirNoQuotes)CloudFoundry.WindowsPrison.ComWrapper.dll&quot;" />
   </Target>
 
   <!-- Target for installing go packages and other dependecies for hacking -->
