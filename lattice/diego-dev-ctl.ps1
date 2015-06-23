@@ -195,6 +195,7 @@ try
     $repDiskMB = $latticeConfig.repDiskMB
     $repListenAddr = $latticeConfig.repListenAddr
     $repRootFSProvider = $latticeConfig.repRootFSProvider
+    $repContainerMaxCpuShares = $latticeConfig.repContainerMaxCpuShares
 
     $processes = @{
         "converger" = @{
@@ -216,7 +217,7 @@ try
             "stdout" = "rep.stdout.log";
             "stderr" = "rep.stderr.log";
             "pid" = "rep.pid";
-            "args" = "-etcdCluster ${etcdCluster} -consulCluster=`"${consulCluster}`" -cellID=${repCellID} -zone=${repZone} -rootFSProvider=${repRootFSProvider} -listenAddr=${repListenAddr} -gardenNetwork=${gardenListenNetwork} -gardenAddr=${gardenListenAddr} -memoryMB=${repMemoryMB} -diskMB=${repDiskMB}";
+            "args" = "-etcdCluster ${etcdCluster} -consulCluster=`"${consulCluster}`" -cellID=${repCellID} -zone=${repZone} -rootFSProvider=${repRootFSProvider} -listenAddr=${repListenAddr} -gardenNetwork=${gardenListenNetwork} -gardenAddr=${gardenListenAddr} -memoryMB=${repMemoryMB} -diskMB=${repDiskMB} -containerMaxCpuShares=${repContainerMaxCpuShares}";
         };
         "auctioneer" = @{
             "exe" = "auctioneer.exe";

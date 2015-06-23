@@ -1,0 +1,84 @@
+{
+    "setup": {
+      "serial": {
+        "actions": [{
+          "download": {
+            "from": "https://github.com/cloudfoundry-incubator/cf-iis8-buildpack/archive/master.zip",
+            "to": "%TEMP%/iis8buildpack",
+            "cache_key": ""
+          }
+        }, {
+          "download": {
+            "from": "https://github.com/madskristensen/MiniBlog/archive/master.zip",
+            "to": ".",
+            "cache_key": ""
+          }
+        }]
+      }
+    },
+    "action": {
+      "run": {
+        "path": "%TEMP%/iis8buildpack/bin/start.bat",
+        "args": [
+          "app",
+          "",
+          "."
+        ],
+        "env": [{
+          "name": "PROCESS_GUID",
+          "value": "miniblog"
+        }, {
+          "name": "PORT",
+          "value": "8080"
+        }],
+        "resource_limits": {},
+        "log_source": "APP"
+      }
+    },
+    "monitor": {
+      "timeout": {
+        "action": {
+          "run": {
+            "path": "/tmp/lifecycle/healthcheck",
+            "args": [
+              "-port=8080"
+            ],
+            "env": null,
+            "resource_limits": {},
+            "log_source": "HEALTH"
+          }
+        },
+        "timeout": 30000000000
+      }
+    },
+    "process_guid": "miniblog",
+    "domain": "lattice",
+    "rootfs": "preloaded:windows2012R2",
+    "instances": 1,
+    "env": [{
+      "name": "PROCESS_GUID",
+      "value": "miniblog"
+    }, {
+      "name": "PORT",
+      "value": "8080"
+    }],
+    "start_timeout": 60,
+    "disk_mb": 1024,
+    "memory_mb": 1024,
+    "cpu_weight": 10,
+    "privileged": true,
+    "ports": [
+      8080
+    ],
+    "routes": {
+      "cf-router": [{
+        "hostnames": [
+          "miniblog.192.168.11.11.xip.io"
+        ],
+        "port": 8080
+      }]
+    },
+    "log_source": "APP",
+    "log_guid": "miniblog",
+    "metrics_guid": "miniblog"
+}
