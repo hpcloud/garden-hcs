@@ -2,14 +2,14 @@
   "etcdCluster": "http://192.168.11.11.xip.io:4001",
   "consulCluster": "http://127.0.0.1:8500",
   "gardenListenNetwork": "tcp",
-  "gardenListenAddr": "127.0.0.01:58008",
+  "gardenListenAddr": "127.0.0.1:58008",
   "gardenLogLevel": "info",
   "consulServerIp": "192.168.11.11",
   "repCellID": "windows1",
-  "repZone": "z2",
+  "repZone": "z1",
   "repMemoryMB": "auto",
   "repDiskMB": "auto",
   "repListenAddr": "0.0.0.0:1700",
-  "repRootFSProvider": "windows2012R2",
+  "repRootFSProvider": "win",
   "repContainerMaxCpuShares": 1
 }
