@@ -76,8 +76,8 @@ func (t *ContainerRunInfo) GetIDispatch() (*ole.IDispatch, error) {
 	}
 }
 
-func (t *ContainerRunInfo) AddEnvironemntVariable(envName string, envValue string) {
-	_, err := oleutil.CallMethod(t.runInfo, "AddEnvironemntVariable", envName, envValue)
+func (t *ContainerRunInfo) AddEnvironmentVariable(envName string, envValue string) {
+	_, err := oleutil.CallMethod(t.runInfo, "AddEnvironmentVariable", envName, envValue)
 	if err != nil {
 		log.Fatal(err)
 	}

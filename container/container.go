@@ -327,6 +327,7 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 	envs = append(envs, "NETIN_PORT="+strconv.FormatUint(uint64(container.lastNetInPort), 10))
 
 	cri, err := prison_client.CreateContainerRunInfo()
+
 	defer cri.Release()
 	if err != nil {
 		container.logger.Error("Error trying to create ContainerRunInfo for a prison", err)
@@ -335,7 +336,7 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 
 	for _, env := range envs {
 		spltiEnv := strings.SplitN(env, "=", 2)
-		cri.AddEnvironemntVariable(spltiEnv[0], spltiEnv[1])
+		cri.AddEnvironmentVariable(spltiEnv[0], spltiEnv[1])
 	}
 
 	concatArgs := ""

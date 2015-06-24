@@ -12,6 +12,7 @@ import (
 	"github.com/cloudfoundry-incubator/garden"
 	"github.com/cloudfoundry-incubator/garden-windows/container"
 	"github.com/go-ole/go-ole"
+	"github.com/go-ole/go-ole/oleutil"
 	"github.com/pivotal-golang/lager"
 )
 
@@ -45,9 +46,27 @@ func NewPrisonBackend(containerRootPath string, logger lager.Logger) (*prisonBac
 func (prisonBackend *prisonBackend) Start() error {
 	err := ole.CoInitializeEx(0, ole.COINIT_MULTITHREADED)
 
+	if err != nil {
+		return err
+	}
+
+	containerManager, err := oleutil.CreateObject("CloudFoundry.WindowsPrison.ComWrapper.ContainerManager")
+
+	if err != nil {
+		return err
+	}
+
+	iContainerManager, err := containerManager.QueryInterface(ole.IID_IDispatch)
+
+	if err != nil {
+		return err
+	}
+
+	oleutil.CallMethod(iContainerManager, "InitPrison")
+
 	prisonBackend.logger.Info("prison backend started")
 
-	return err
+	return nil
 }
 
 func (prisonBackend *prisonBackend) Stop() {
@@ -107,7 +126,7 @@ func (prisonBackend *prisonBackend) Containers(garden.Properties) (containers []
 }
 
 func (prisonBackend *prisonBackend) Lookup(handle string) (garden.Container, error) {
-	return nil, nil
+	return prisonBackend.containers[handle], nil
 }
 
 // BulkInfo returns info or error for a list of containers.
