@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory=$true, Position=1)]
-    [ValidateSet('start', 'stop', 'status')]
+    [ValidateSet('start', 'stop', 'status', 'watch-status')]
     [string]$Action,
 
     [Parameter(Mandatory=$false, Position=2)]
@@ -265,6 +265,19 @@ try
                     "Status" = Get-DaemonHumanStatus $_
                 }
             } | Format-Table
+        }
+        "watch-status" {
+            while ($true)
+            {
+                cls
+                $processesToAct | ForEach-Object {
+                    New-Object PSObject -Property @{
+                        "Component" = $_
+                        "Status" = Get-DaemonHumanStatus $_
+                    }
+                } | Format-Table
+                sleep 2
+            }
         }
     }
 
