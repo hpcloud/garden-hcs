@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/cloudfoundry-incubator/cf-lager"
@@ -24,6 +25,7 @@ var containerizerURL = flag.String(
 )
 
 func main() {
+
 	defaultListNetwork := "tcp"
 	defaultListAddr := "0.0.0.0:58008"
 
@@ -48,7 +50,9 @@ func main() {
 	flag.Parse()
 
 	logger, _ := cf_lager.New("garden-windows")
-	logger.Info("Pelerinul e viu")
+	logger.Info("Pelerinul e viu", lager.Data{
+		"info": filepath.IsAbs("c:\\windows\\system32\\"),
+	})
 
 	prisonBackend, err := backend.NewPrisonBackend("c:\\workspace\\prison", logger)
 	if err != nil {
@@ -73,6 +77,9 @@ func main() {
 	go func() {
 		<-signals
 		gardenServer.Stop()
+
+		logger.Info("Pelerinul zice: na ca s-o oprit")
+
 		os.Exit(0)
 	}()
 

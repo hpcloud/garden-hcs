@@ -47,7 +47,7 @@ func (t *ProcessTracker) ID() uint32 {
 	}
 	defer iDpid.Clear()
 
-	return uint32(iDpid.Value().(int64))
+	return uint32(iDpid.Value().(int32))
 }
 
 func (t *ProcessTracker) Wait() (int, error) {
@@ -62,7 +62,7 @@ func (t *ProcessTracker) Wait() (int, error) {
 	}
 	defer exitCode.Clear()
 
-	return int(exitCode.Value().(int64)), nil
+	return int(exitCode.Value().(int32)), nil
 }
 
 func (t *ProcessTracker) SetTTY(garden.TTYSpec) error {

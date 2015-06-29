@@ -53,10 +53,12 @@ func finalizeContainerRunInfo(t *ContainerRunInfo) {
 
 func (t *ContainerRunInfo) Release() error {
 	if t.runInfo != nil {
+		log.Print("PELERINUL MISTAKE!!! before")
 		t.runInfo.Release()
+		log.Print("PELERINUL MISTAKE!!! after")
 
 		//lastRefCount := t.runInfo.Release()
-		//if lastRefCount != 0 {
+		//if lastRefCount != 0 {.,
 		//	log.Fatalf("ContainerRunInfo ref count: %d. Expected 0.", lastRefCount)
 		//}
 

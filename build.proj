@@ -20,7 +20,7 @@
 
     <!-- Path to the packages.config file -->
     <PackagesConfigFile>&quot;$(ProjectRoot)\prison\packages.config&quot;</PackagesConfigFile>
-
+  
     <!-- Path to where the nuget packages get restored -->
     <NugetPackagesDirNoQuotes>$(ProjectRoot)\prison\packages</NugetPackagesDirNoQuotes>
     <NugetPackagesDir>&quot;$(NugetPackagesDirNoQuotes)&quot;</NugetPackagesDir>
@@ -57,10 +57,21 @@
     
   </PropertyGroup>
 
-  <!-- TODO - implement some checks to see if GOPATH is correct, dependecies exist, etc. -->
-  
   <!-- Imports -->
   <Import Condition="Exists('$(MSBuildExtensionsTargetsFile)')" Project="$(MSBuildExtensionsTargetsFile)" />
+
+  <!-- TODO - implement some checks to see if GOPATH is correct, dependecies exist, etc. -->
+
+  <!-- Target for installing tools and setting up development dependencies -->
+  <Target Name="Tools">
+    <!-- Verification of environment (go, GOPATH, GOC, gcc, etc.) -->
+    
+    <!-- Privileges for current user -->
+    
+    <!-- GO packages and MSBuild tasks -->
+    
+  </Target>
+  
 
   <!-- Target for restoring nuget packages -->
   <Target Name="RestoreNugetPackages" DependsOnTargets="UnregisterCOM">

@@ -1,84 +1,165 @@
 {
-    "setup": {
-      "serial": {
-        "actions": [{
+  "setup": {
+    "serial": {
+      "actions": [
+        {
           "download": {
-            "from": "https://github.com/cloudfoundry-incubator/cf-iis8-buildpack/archive/master.zip",
-            "to": "tmp/iis8buildpack",
+            "from": "https:\/\/github.com\/cloudfoundry-incubator\/cf-iis8-buildpack\/archive\/master.zip",
+            "to": ".\/",
             "cache_key": ""
-          }
-        }, {
-          "download": {
-            "from": "https://github.com/madskristensen/MiniBlog/archive/master.zip",
-            "to": "app/",
-            "cache_key": ""
-          }
-        }]
-      }
-    },
-    "action": {
-      "run": {
-        "path": "tmp/iis8buildpack/bin/start.bat",
-        "args": [
-          "app",
-          "",
-          "."
-        ],
-        "env": [{
-          "name": "PROCESS_GUID",
-          "value": "miniblog"
-        }, {
-          "name": "PORT",
-          "value": "8080"
-        }],
-        "resource_limits": {},
-        "log_source": "APP"
-      }
-    },
-    "monitor": {
-      "timeout": {
-        "action": {
-          "run": {
-            "path": "tmp/lifecycle/healthcheck",
-            "args": [
-              "-port=8080"
-            ],
-            "env": null,
-            "resource_limits": {},
-            "log_source": "HEALTH"
           }
         },
-        "timeout": 30000000000
-      }
-    },
-    "process_guid": "miniblog",
-    "domain": "lattice",
-    "rootfs": "win:test",
-    "instances": 1,
-    "env": [{
+        {
+          "download": {
+            "from": "https:\/\/github.com\/madskristensen\/MiniBlog\/archive\/master.zip",
+            "to": ".\/",
+            "cache_key": ""
+          }
+        },
+        {
+          "run": {
+            "path": "c:\\windows\\system32\\cmd.exe",
+            "args": [
+              "/c mkdir ..\\build"
+            ],
+            "resource_limits": {
+              
+            },
+            "log_source": "APP"
+          }
+        },
+        {
+          "run": {
+            "path": "c:\\windows\\system32\\cmd.exe",
+            "args": [
+              "/c xcopy \/y \/e ..\\MiniBlog-master\\Website\\* ..\\build"
+            ],
+            "resource_limits": {
+              
+            },
+            "log_source": "APP"
+          }
+        },
+		   {
+          "run": {
+            "path": "c:\\windows\\system32\\cmd.exe",
+            "args": [
+              "/c mkdir ..\\build\\iishwc"
+            ],
+            "resource_limits": {
+              
+            },
+            "log_source": "APP"
+          }
+        },
+        {
+          "run": {
+            "path": "c:\\windows\\system32\\cmd.exe",
+            "args": [
+              "/c xcopy \/y \/e ..\\cf-iis8-buildpack-master\\iishwc\\* ..\\build\\iishwc"
+            ],
+            "resource_limits": {
+              
+            },
+            "log_source": "APP"
+          }
+        },
+        {
+          "run": {
+            "path": "c:\\windows\\system32\\cmd.exe",
+            "args": [
+              "/c move \/y ..\\build ..\\app"
+            ],
+            "resource_limits": {
+              
+            },
+            "log_source": "APP"
+          }
+        },
+        {
+          "run": {
+            "path": "c:\\windows\\system32\\cmd.exe",
+            "args": [
+              "/c set > env.txt"
+            ],
+            "resource_limits": {
+              
+            },
+            "log_source": "APP"
+          }
+        }
+      ]
+    }
+  },
+  "action": {
+    "run": {
+      "path": "app\\iishwc\\start.bat",
+      "args": [
+        "2>&1 1>log.txt"
+      ],
+      "env": [
+        {
+          "name": "VCAP_SERVICES",
+          "value": "{}"
+		},
+        {
+          "name": "HOME",
+          "value": "app"
+        }
+      ],
+      "resource_limits": {
+        
+      },
+      "log_source": "APP"
+    }
+  },
+  "monitor": {
+    "timeout": {
+      "action": {
+        "run": {
+          "path": "C:\\Windows\\System32\\cmd.exe",
+          "args": [
+            "/c echo ok"
+          ],
+          "env": null,
+          "resource_limits": {
+            
+          },
+          "log_source": "HEALTH"
+        }
+      },
+      "timeout": 30000000000
+    }
+  },
+  "process_guid": "miniblog",
+  "domain": "lattice",
+  "rootfs": "win:test",
+  "instances": 1,
+  "env": [
+    {
       "name": "PROCESS_GUID",
       "value": "miniblog"
-    }, {
-      "name": "PORT",
-      "value": "8080"
-    }],
-    "start_timeout": 60,
-    "disk_mb": 0,
-    "memory_mb": 128,
-    "cpu_weight": 0,
-    "privileged": true,
-    "ports": [
-      8080
-    ],
-    "routes": {
-      "cf-router": [{
+    }
+  ],
+  "start_timeout": 60,
+  "disk_mb": 0,
+  "memory_mb": 128,
+  "cpu_weight": 0,
+  "privileged": true,
+  "ports": [
+    8080
+  ],
+  "routes": {
+    "cf-router": [
+      {
         "hostnames": [
           "miniblog.192.168.11.11.xip.io"
         ],
         "port": 8080
-      }]
-    },
-    "log_source": "APP",
-    "log_guid": "miniblog",
-    "metrics_guid": "miniblog"
+      }
+    ]
+  },
+  "log_source": "APP",
+  "log_guid": "miniblog",
+  "metrics_guid": "miniblog"
 }
