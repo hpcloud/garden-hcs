@@ -20,7 +20,7 @@
           "run": {
             "path": "c:\\windows\\system32\\cmd.exe",
             "args": [
-              "/c mkdir ..\\build"
+              "/c mkdir ..\\build ..\\logs ..\\tmp"
             ],
             "resource_limits": {
               
@@ -95,17 +95,12 @@
     "run": {
       "path": "app\\iishwc\\start.bat",
       "args": [
-        "2>&1 1>log.txt"
       ],
       "env": [
         {
           "name": "VCAP_SERVICES",
           "value": "{}"
-		},
-        {
-          "name": "HOME",
-          "value": "app"
-        }
+		}
       ],
       "resource_limits": {
         

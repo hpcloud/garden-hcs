@@ -18,11 +18,6 @@ var containerGraceTime = flag.Duration(
 	0,
 	"time after which to destroy idle containers",
 )
-var containerizerURL = flag.String(
-	"containerizerURL",
-	"http://127.0.0.1",
-	"URL for the Containerizer container server",
-)
 
 func main() {
 
@@ -46,6 +41,12 @@ func main() {
 		"address to listen on",
 	)
 
+	var cellIP = flag.String(
+		"cellIP",
+		"127.0.0.1",
+		"IP address of the current cell, as exposed to the router",
+	)
+
 	cf_lager.AddFlags(flag.CommandLine)
 	flag.Parse()
 
@@ -54,7 +55,7 @@ func main() {
 		"info": filepath.IsAbs("c:\\windows\\system32\\"),
 	})
 
-	prisonBackend, err := backend.NewPrisonBackend("c:\\workspace\\prison", logger)
+	prisonBackend, err := backend.NewPrisonBackend("c:\\workspace\\prison", logger, *cellIP)
 	if err != nil {
 		logger.Fatal("Server Failed to Start", err)
 		os.Exit(1)

@@ -1,0 +1,77 @@
+{
+  "setup": {
+    "serial": {
+      "actions": [
+        {
+          "download": {
+            "from": "https:\/\/region-b.geo-1.objects.hpcloudsvc.com\/v1\/10990308817909\/pelerinul\/selfhostedapi.zip",
+            "to": ".\/",
+            "cache_key": ""
+          }
+        }
+      ]
+    }
+  },
+  "action": {
+    "run": {
+      "path": "SelfHostedWebAPI.exe",
+      "args": [
+      ],
+      "env": [
+      ],
+      "resource_limits": {
+        
+      },
+      "log_source": "APP"
+    }
+  },
+  "monitor": {
+    "timeout": {
+      "action": {
+        "run": {
+          "path": "C:\\Windows\\System32\\cmd.exe",
+          "args": [
+            "/c echo ok"
+          ],
+          "env": null,
+          "resource_limits": {
+            
+          },
+          "log_source": "HEALTH"
+        }
+      },
+      "timeout": 30000000000
+    }
+  },
+  "process_guid": "owin",
+  "domain": "192.168.11.11.xip.io",
+  "rootfs": "win:test",
+  "instances": 1,
+  "env": [
+    {
+      "name": "PROCESS_GUID",
+      "value": "owin"
+    }
+  ],
+  "start_timeout": 60,
+  "disk_mb": 0,
+  "memory_mb": 128,
+  "cpu_weight": 0,
+  "privileged": true,
+  "ports": [
+    8080
+  ],
+  "routes": {
+    "cf-router": [
+      {
+        "hostnames": [
+          "owin"
+        ],
+        "port": 8080
+      }
+    ]
+  },
+  "log_source": "APP",
+  "log_guid": "owin",
+  "metrics_guid": "owin"
+}

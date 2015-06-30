@@ -61,7 +61,9 @@
   <Import Condition="Exists('$(MSBuildExtensionsTargetsFile)')" Project="$(MSBuildExtensionsTargetsFile)" />
 
   <!-- TODO - implement some checks to see if GOPATH is correct, dependecies exist, etc. -->
-
+  <!-- TODO - need to also bundle tar and/or git, etc. -->
+  <!-- TODO - need to also bundle VC redist (for iishwc). http://www.microsoft.com/en-US/download/details.aspx?id=40784 -->
+  
   <!-- Target for installing tools and setting up development dependencies -->
   <Target Name="Tools">
     <!-- Verification of environment (go, GOPATH, GOC, gcc, etc.) -->
@@ -80,7 +82,7 @@
   </Target>
 
   <!-- Target for creating the bin directory with all required prison assemblies and artifacts -->
-  <Target Name="GatherAssemblies" DependsOnTargets="RestoreNugetPackages">
+  <Target Name="GatherPrisonAssemblies" DependsOnTargets="RestoreNugetPackages">
     <RemoveDir Directories="$(BinDirNoQuotes)" />
     <MakeDir Directories="$(BinDirNoQuotes)"/>
 
@@ -89,7 +91,7 @@
       <Artifacts Include="$(NugetPackagesDirNoQuotes)\windows-prison*\Content\*" />
       <Artifacts Include="$(NugetPackagesDirNoQuotes)\alphafs*\lib\net45\*" />
       <Artifacts Include="$(NugetPackagesDirNoQuotes)\ini.net*\lib\net20\*" />
-      <Artifacts Include="$(NugetPackagesDirNoQuotes)\nlog*\net45\*" />
+      <Artifacts Include="$(NugetPackagesDirNoQuotes)\nlog*\lib\net45\*" />
     </ItemGroup>
 
     <Copy SourceFiles="@(Artifacts)" DestinationFolder="$(BinDirNoQuotes)" />
@@ -103,7 +105,7 @@
   </Target>
 
   <!-- Target for registering the COM Windows Prison -->
-  <Target Name="RegisterCOM" DependsOnTargets="GatherAssemblies">
+  <Target Name="RegisterCOM" DependsOnTargets="GatherPrisonAssemblies">
     <Exec Command="$(RegAsmCommand) /verbose /tlb /codebase &quot;$(BinDirNoQuotes)CloudFoundry.WindowsPrison.ComWrapper.dll&quot;" />
   </Target>
 
@@ -125,6 +127,7 @@
   
   <!-- Target for assembling diego dependencies -->
   <Target Name="AssembleDiego">
+    <RemoveDir Directories="$(DiegoArtifactsDir)" />
     <MakeDir Directories="$(DiegoArtifactsDir)" />
   </Target>
 
@@ -161,6 +164,16 @@
     <Copy SourceFiles="%(DiegoProj.Identity)\%(DiegoProj.Artifact)" DestinationFolder="$(DiegoArtifactsDir)" />
   </Target>
 
+  <!-- Target for copying prison assemblies for a diego cell -->
+  <Target Name="CopyDiegoPrisonAssemblies" DependsOnTargets="GatherPrisonAssemblies" AfterTargets="AssembleDiego">
+    <ItemGroup>
+      <PrisonAssemblies Include="$(BinDirNoQuotes)\*.*" />
+    </ItemGroup>
+
+    <MakeDir Directories="$(DiegoArtifactsDir)\prison" />
+    <Copy SourceFiles="@(PrisonAssemblies)" DestinationFolder="$(DiegoArtifactsDir)\prison" />
+  </Target>
+  
   <!-- List of scripts and configuration files that need to be a part of a Diego cell -->
   <ItemGroup>
     <DiegoFile Include="$(ProjectRoot)\lattice\diego-dev-ctl.ps1">
@@ -173,6 +186,10 @@
     
     <DiegoFile Include="$(ProjectRoot)\lattice\config\windows-lattice.json">
       <ArtifactDestinationDir>$(DiegoArtifactsDir)\config</ArtifactDestinationDir>
+    </DiegoFile>
+
+    <DiegoFile Include="$(ProjectRoot)\lattice\config\NLog.config">
+      <ArtifactDestinationDir>$(DiegoArtifactsDir)\</ArtifactDestinationDir>
     </DiegoFile>
   </ItemGroup>
 

@@ -5,7 +5,6 @@ import (
 	"io"
 	"net"
 	"net/rpc"
-	"path"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -22,6 +21,18 @@ import (
 	"github.com/go-ole/go-ole/oleutil"
 )
 
+type PrisonContainerSpec struct {
+	garden.ContainerSpec
+}
+
+type UndefinedPropertyError struct {
+	Key string
+}
+
+func (err UndefinedPropertyError) Error() string {
+	return fmt.Sprintf("property does not exist: %s", err.Key)
+}
+
 type container struct {
 	id     string
 	handle string
@@ -29,15 +40,20 @@ type container struct {
 	logger lager.Logger
 
 	rootPath string
+	hostIP   string
+
+	PrisonContainerSpec
 
 	rpc           *rpc.Client
 	pids          map[int]*prison_client.ProcessTracker
 	lastNetInPort uint32
 	prison        *ole.IDispatch
-	runMutex      *sync.Mutex
+
+	runMutex        sync.Mutex
+	propertiesMutex sync.RWMutex
 }
 
-func NewContainer(id, handle string, rootPath string, logger lager.Logger) *container {
+func NewContainer(id, handle string, rootPath string, logger lager.Logger, hostIP string, properties garden.Properties) *container {
 	logger.Debug("PELERINUL: NewContainer")
 	iUcontainer, errr := oleutil.CreateObject("CloudFoundry.WindowsPrison.ComWrapper.Container")
 
@@ -51,17 +67,21 @@ func NewContainer(id, handle string, rootPath string, logger lager.Logger) *cont
 		logger.Fatal("Error trying to query COM interface", errr)
 	}
 
-	return &container{
+	result := &container{
 		id:     id,
 		handle: handle,
 
 		rootPath: rootPath,
+		hostIP:   hostIP,
 		logger:   logger,
 
-		pids:     make(map[int]*prison_client.ProcessTracker),
-		prison:   iDcontainer,
-		runMutex: &sync.Mutex{},
+		pids:   make(map[int]*prison_client.ProcessTracker),
+		prison: iDcontainer,
 	}
+
+	result.PrisonContainerSpec.Properties = properties
+
+	return result
 }
 
 func (container *container) Handle() string {
@@ -120,8 +140,33 @@ func (container *container) Stop(kill bool) error {
 func (container *container) Info() (garden.ContainerInfo, error) {
 	container.logger.Debug("PELERINUL: Info")
 
-	container.logger.Info("Info called")
-	return garden.ContainerInfo{Events: []string{"party"}, ProcessIDs: []uint32{}, MappedPorts: []garden.PortMapping{}}, nil
+	properties, _ := container.Properties()
+
+	result := garden.ContainerInfo{
+		State:       "active",
+		ExternalIP:  container.hostIP,
+		HostIP:      container.hostIP,
+		ContainerIP: container.hostIP,
+		Events:      []string{"party"},
+		ProcessIDs:  []uint32{},
+		Properties:  properties,
+		MappedPorts: []garden.PortMapping{
+			garden.PortMapping{
+				HostPort:      container.lastNetInPort,
+				ContainerPort: container.lastNetInPort,
+			},
+		},
+	}
+
+	container.logger.Info("Info called", lager.Data{
+		"State":         result.State,
+		"HostIP":        result.HostIP,
+		"ContainerIP":   result.ContainerIP,
+		"HostPort":      result.MappedPorts[0].HostPort,
+		"ContainerPort": result.MappedPorts[0].ContainerPort,
+	})
+
+	return result, nil
 }
 
 // StreamIn streams data into a file in a container.
@@ -133,7 +178,7 @@ func (container *container) StreamIn(dstPath string, source io.Reader) error {
 
 	container.logger.Info(fmt.Sprintf("StreamIn dstPath:", dstPath))
 
-	absDestPath := path.Join(container.rootPath, container.handle, dstPath)
+	absDestPath := filepath.Join(container.rootPath, container.handle, dstPath)
 	container.logger.Info(fmt.Sprintf("Streaming in to file: ", absDestPath))
 
 	err := os.MkdirAll(absDestPath, 0777)
@@ -175,7 +220,7 @@ func (container *container) StreamOut(srcPath string) (io.ReadCloser, error) {
 
 	container.logger.Info(fmt.Sprintf("StreamOut srcPath:", srcPath))
 
-	containerPath := path.Join(container.rootPath, container.handle)
+	containerPath := filepath.Join(container.rootPath, container.handle)
 
 	workingDir := filepath.Dir(srcPath)
 	compressArg := filepath.Base(srcPath)
@@ -184,7 +229,7 @@ func (container *container) StreamOut(srcPath string) (io.ReadCloser, error) {
 		compressArg = "."
 	}
 
-	workingDir = path.Join(containerPath, workingDir)
+	workingDir = filepath.Join(containerPath, workingDir)
 
 	tarRead, tarWrite := io.Pipe()
 
@@ -293,7 +338,7 @@ func (container *container) NetIn(hostPort, containerPort uint32) (uint32, uint3
 	container.logger.Info(fmt.Sprintf("TODO NetIn", hostPort, containerPort))
 	freePort := freeTcp4Port()
 	container.lastNetInPort = freePort
-	return freePort, containerPort, nil
+	return freePort, freePort, nil
 }
 
 // Whitelist outbound network traffic.
@@ -325,13 +370,13 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 	container.logger.Info(fmt.Sprintf("Run command: ", spec.Path, spec.Args, spec.Dir, spec.User, spec.Env))
 
 	cmdPath := "C:\\Windows\\System32\\cmd.exe"
-	rootPath := path.Join(container.rootPath, container.handle)
+	rootPath := filepath.Join(container.rootPath, container.handle)
 	strings.Replace(rootPath, "/", "\\", -1)
 
-	spec.Dir = path.Join(rootPath, spec.Dir)
+	spec.Dir = filepath.Join(rootPath, spec.Dir)
 
 	if !filepath.IsAbs(spec.Path) {
-		spec.Path = path.Join(rootPath, spec.Path)
+		spec.Path = filepath.Join(rootPath, spec.Path)
 	}
 
 	envs := spec.Env
@@ -341,6 +386,11 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 	// https://github.com/cloudfoundry-incubator/app-manager/blob/master/start_message_builder/start_message_builder.go#L182
 	envs = append(envs, "NETIN_PORT="+strconv.FormatUint(uint64(container.lastNetInPort), 10))
 	envs = append(envs, "PORT="+strconv.FormatUint(uint64(container.lastNetInPort), 10))
+
+	containerPath := filepath.Join(container.rootPath, container.handle)
+
+	envs = append(envs, "HOMEPATH="+containerPath)
+	envs = append(envs, "HOME="+filepath.Join(containerPath, "app"))
 
 	containerRunInfo, err := prison_client.CreateContainerRunInfo()
 
@@ -427,7 +477,8 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 	if isLocked.Value().(bool) == false {
 
 		oleutil.PutProperty(container.prison, "HomePath", rootPath)
-		// oleutil.PutProperty(container, "MemoryLimitBytes", 1024*1024*300)
+		oleutil.PutProperty(container.prison, "NetworkPort", uint(container.lastNetInPort))
+		oleutil.PutProperty(container.prison, "MemoryLimitBytes", int64(1024*1024*512))
 
 		container.logger.Info("Locking down...")
 		_, errr = oleutil.CallMethod(container.prison, "Lockdown")
@@ -500,8 +551,14 @@ func (container *container) Metrics() (garden.Metrics, error) {
 
 // Properties returns the current set of properties
 func (container *container) Properties() (garden.Properties, error) {
-	container.logger.Info("TODO: implement Properties()")
-	return nil, nil
+	container.propertiesMutex.RLock()
+	defer container.propertiesMutex.RUnlock()
+
+	container.logger.Info("getting-properties", lager.Data{
+		"properties": container.PrisonContainerSpec.Properties,
+	})
+
+	return container.PrisonContainerSpec.Properties, nil
 }
 
 // Property returns the value of the property with the specified name.
@@ -509,8 +566,17 @@ func (container *container) Properties() (garden.Properties, error) {
 // Errors:
 // * When the property does not exist on the container.
 func (container *container) Property(name string) (string, error) {
-	container.logger.Info("TODO: implement Property()")
-	return "", nil
+	container.logger.Info("getting-property", lager.Data{"name": name})
+
+	container.propertiesMutex.RLock()
+	defer container.propertiesMutex.RUnlock()
+
+	value, found := container.PrisonContainerSpec.Properties[name]
+	if !found {
+		return "", UndefinedPropertyError{name}
+	}
+
+	return value, nil
 }
 
 // Set a named property on a container to a specified value.
@@ -518,7 +584,20 @@ func (container *container) Property(name string) (string, error) {
 // Errors:
 // * None.
 func (container *container) SetProperty(name string, value string) error {
-	container.logger.Info("TODO: implement SetProperty()")
+	container.logger.Info("setting-property", lager.Data{"name": name})
+
+	container.propertiesMutex.Lock()
+	defer container.propertiesMutex.Unlock()
+
+	props := garden.Properties{}
+	for k, v := range container.PrisonContainerSpec.Properties {
+		props[k] = v
+	}
+
+	props[name] = value
+
+	container.PrisonContainerSpec.Properties = props
+
 	return nil
 }
 
@@ -527,7 +606,17 @@ func (container *container) SetProperty(name string, value string) error {
 // Errors:
 // * None.
 func (container *container) RemoveProperty(name string) error {
-	container.logger.Info("TODO: implement RemoveProperty()")
+	container.logger.Info("removing-property", lager.Data{"name": name})
+
+	container.propertiesMutex.Lock()
+	defer container.propertiesMutex.Unlock()
+
+	if _, found := container.PrisonContainerSpec.Properties[name]; !found {
+		return UndefinedPropertyError{name}
+	}
+
+	delete(container.PrisonContainerSpec.Properties, name)
+
 	return nil
 }
 
@@ -554,6 +643,10 @@ func (container *container) destroy() error {
 		container.logger.Info(fmt.Sprintf("Container destroyed: ", container.id))
 	}
 	return nil
+}
+
+func (container *container) getContainerPath() string {
+	return filepath.Join(container.rootPath, container.handle)
 }
 
 func freeTcp4Port() uint32 {

@@ -4,6 +4,7 @@
   "gardenListenNetwork": "tcp",
   "gardenListenAddr": "127.0.0.1:58008",
   "gardenLogLevel": "info",
+  "gardenCellIP": "192.168.11.51",
   "consulServerIp": "192.168.11.11",
   "repCellID": "windows1",
   "repZone": "z1",

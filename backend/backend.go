@@ -19,6 +19,7 @@ import (
 type prisonBackend struct {
 	containerBinaryPath string
 	containerRootPath   string
+	hostIP              string
 
 	logger lager.Logger
 
@@ -27,7 +28,7 @@ type prisonBackend struct {
 	containersMutex *sync.RWMutex
 }
 
-func NewPrisonBackend(containerRootPath string, logger lager.Logger) (*prisonBackend, error) {
+func NewPrisonBackend(containerRootPath string, logger lager.Logger, hostIP string) (*prisonBackend, error) {
 	logger.Debug("PELERINUL: prisonBackend.NewPrisonBackend")
 
 	containerIDs := make(chan string)
@@ -36,6 +37,7 @@ func NewPrisonBackend(containerRootPath string, logger lager.Logger) (*prisonBac
 
 	return &prisonBackend{
 		containerRootPath: containerRootPath,
+		hostIP:            hostIP,
 
 		logger: logger,
 
@@ -66,15 +68,20 @@ func (prisonBackend *prisonBackend) Start() error {
 		return err
 	}
 
-	oleutil.CallMethod(iContainerManager, "InitPrison")
+	_, err = oleutil.CallMethod(iContainerManager, "InitPrison")
 
-	prisonBackend.logger.Info("prison backend started")
+	if err != nil {
+		prisonBackend.logger.Error("Error initializing prison", err)
+		return err
+	}
+
+	prisonBackend.logger.Info("Prison backend started")
 
 	return nil
 }
 
 func (prisonBackend *prisonBackend) Stop() {
-	prisonBackend.logger.Info("prison backend stopped")
+	prisonBackend.logger.Info("Prison backend stopped")
 }
 
 func (prisonBackend *prisonBackend) GraceTime(garden.Container) time.Duration {
@@ -109,7 +116,7 @@ func (prisonBackend *prisonBackend) Create(containerSpec garden.ContainerSpec) (
 		handle = containerSpec.Handle
 	}
 
-	container := container.NewContainer(id, handle, prisonBackend.containerRootPath, prisonBackend.logger)
+	container := container.NewContainer(id, handle, prisonBackend.containerRootPath, prisonBackend.logger, prisonBackend.hostIP, containerSpec.Properties)
 
 	prisonBackend.containersMutex.Lock()
 	prisonBackend.containers[handle] = container
@@ -143,7 +150,47 @@ func (prisonBackend *prisonBackend) Lookup(handle string) (garden.Container, err
 // BulkInfo returns info or error for a list of containers.
 func (prisonBackend *prisonBackend) BulkInfo(handles []string) (map[string]garden.ContainerInfoEntry, error) {
 	prisonBackend.logger.Debug("PELERINUL: prisonBackend.BulkInfo")
-	return nil, nil
+
+	result := make(map[string]garden.ContainerInfoEntry)
+
+	for i := 0; i < len(handles); i++ {
+		handle := handles[i]
+
+		cont, err := prisonBackend.Lookup(handle)
+
+		if err != nil {
+			result[handle] = garden.ContainerInfoEntry{
+				Info: garden.ContainerInfo{},
+				Err: &garden.Error{
+					ErrorMsg: err.Error(),
+				},
+			}
+			continue
+		}
+
+		if cont == nil {
+			continue
+		}
+
+		contInfo, err := cont.Info()
+
+		if err != nil {
+			result[handle] = garden.ContainerInfoEntry{
+				Info: garden.ContainerInfo{},
+				Err: &garden.Error{
+					ErrorMsg: err.Error(),
+				},
+			}
+			continue
+		}
+
+		result[handle] = garden.ContainerInfoEntry{
+			Info: contInfo,
+			Err:  nil,
+		}
+	}
+
+	return result, nil
 }
 
 // BulkMetrics returns metrics or error for a list of containers.

@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory=$true, Position=1)]
-    [ValidateSet('start', 'stop', 'status', 'watch-status')]
+    [ValidateSet('start', 'stop', 'status', 'watch-status', 'register-prison', 'unregister-prison')]
     [string]$Action,
 
     [Parameter(Mandatory=$false, Position=2)]
@@ -141,6 +141,45 @@ function Check-Paths{[CmdletBinding()]param($daemon)
     mkdir $consulDataDir -ErrorAction 'SilentlyContinue' | out-null
 }
 
+function Register-Prison{[CmdletBinding()]param()
+    $prisonAssembly = Join-Path $binDir "prison\CloudFoundry.WindowsPrison.ComWrapper.dll"
+    $runtimeDir = [System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()
+    $regasmBin = Join-Path $runtimeDir "regasm.exe"
+
+    Write-Verbose "Registering prison COM assembly '${prisonAssembly}' ..."
+
+    $registerProcess = Start-Process -Wait -PassThru -NoNewWindow $regasmBin "/verbose /tlb /codebase `"${prisonAssembly}`""
+
+    if ($registerProcess.ExitCode -ne 0)
+    {
+        throw 'Registering assembly failed.'
+    }
+    else
+    {
+        Write-Verbose "Assembly registered successfully."
+    }
+}
+
+function Unregister-Prison{[CmdletBinding()]param()
+    $prisonAssembly = Join-Path $binDir "prison\CloudFoundry.WindowsPrison.ComWrapper.dll"
+    $runtimeDir = [System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()
+    $regasmBin = Join-Path $runtimeDir "regasm.exe"
+
+    Write-Verbose "Unregistering prison COM assembly '${prisonAssembly}' ..."
+
+    $registerProcess = Start-Process -Wait -PassThru -NoNewWindow $regasmBin "/verbose /unregister `"${prisonAssembly}`""
+
+    if ($registerProcess.ExitCode -ne 0)
+    {
+        throw 'Unregistering assembly failed.'
+    }
+    else
+    {
+        Write-Verbose "Assembly unregistered successfully."
+    }
+}
+
+
 try
 {
     if (![string]::IsNullOrWhiteSpace($DiegoBinDir))
@@ -186,6 +225,7 @@ try
     $gardenListenNetwork = $latticeConfig.gardenListenNetwork
     $gardenListenAddr = $latticeConfig.gardenListenAddr
     $gardenLogLevel = $latticeConfig.gardenLogLevel
+    $gardenCellIP = $latticeConfig.gardenCellIP
 
     $consulServerIp = $latticeConfig.consulServerIp
 
@@ -231,7 +271,7 @@ try
             "stdout" = "garden-windows.stdout.log";
             "stderr" = "garden-windows.stderr.log";
             "pid" = "garden-windows.pid";
-            "args" = "-listenNetwork=${gardenListenNetwork} -listenAddr=${gardenListenAddr} -logLevel=${gardenLogLevel}";
+            "args" = "-listenNetwork=${gardenListenNetwork} -listenAddr=${gardenListenAddr} -logLevel=${gardenLogLevel} -cellIP=${gardenCellIP}";
         };
     }
 
@@ -246,6 +286,12 @@ try
 
     switch ($Action)
     {
+        "unregister-prison" {
+            Unregister-Prison
+        }
+        "register-prison" {
+            Register-Prison
+        }
         "start" {
             foreach ($daemon in $processesToAct)
             {
