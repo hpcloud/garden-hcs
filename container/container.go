@@ -153,7 +153,7 @@ func (container *container) Info() (garden.ContainerInfo, error) {
 		MappedPorts: []garden.PortMapping{
 			garden.PortMapping{
 				HostPort:      container.lastNetInPort,
-				ContainerPort: container.lastNetInPort,
+				ContainerPort: 8080,
 			},
 		},
 	}
