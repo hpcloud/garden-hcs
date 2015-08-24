@@ -13,15 +13,13 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/Microsoft/hcsshim"
 	"github.com/cloudfoundry-incubator/garden"
-	"github.com/cloudfoundry-incubator/garden-windows/prison_client"
+	"github.com/cloudfoundry-incubator/garden-windows/windows_client"
 	"github.com/pivotal-golang/lager"
-
-	"github.com/go-ole/go-ole"
-	"github.com/go-ole/go-ole/oleutil"
 )
 
-type PrisonContainerSpec struct {
+type WindowsContainerSpec struct {
 	garden.ContainerSpec
 }
 
@@ -42,30 +40,18 @@ type container struct {
 	rootPath string
 	hostIP   string
 
-	PrisonContainerSpec
+	WindowsContainerSpec
 
 	rpc           *rpc.Client
 	pids          map[int]*prison_client.ProcessTracker
 	lastNetInPort uint32
-	prison        *ole.IDispatch
 
 	runMutex        sync.Mutex
 	propertiesMutex sync.RWMutex
 }
 
-func NewContainer(id, handle string, rootPath string, logger lager.Logger, hostIP string, properties garden.Properties) *container {
-	logger.Debug("PELERINUL: NewContainer")
-	iUcontainer, errr := oleutil.CreateObject("CloudFoundry.WindowsPrison.ComWrapper.Container")
-
-	if errr != nil {
-		logger.Fatal("Error creating the COM object for the prison", errr)
-	}
-	defer iUcontainer.Release()
-
-	iDcontainer, errr := iUcontainer.QueryInterface(ole.IID_IDispatch)
-	if errr != nil {
-		logger.Fatal("Error trying to query COM interface", errr)
-	}
+func NewContainer(id, handle string, rootPath string, logger lager.Logger, hostIP string, properties garden.Properties) (*container, error) {
+	logger.Debug("WC: NewContainer")
 
 	result := &container{
 		id:     id,
@@ -75,17 +61,54 @@ func NewContainer(id, handle string, rootPath string, logger lager.Logger, hostI
 		hostIP:   hostIP,
 		logger:   logger,
 
-		pids:   make(map[int]*prison_client.ProcessTracker),
-		prison: iDcontainer,
+		pids: make(map[int]*prison_client.ProcessTracker),
 	}
 
-	result.PrisonContainerSpec.Properties = properties
+	// Name, VolumePath, Name
+	configurationTemplate := `{
+  "SystemType": "Container",
+  "Name": "%s",
+  "Owner": "garden-windows",
+  "IsDummy": false,
+  "VolumePath": "%s",
+  "Devices": [
+    {
+      "DeviceType": "Network",
+      "Connection": {
+        "NetworkName": "Virtual Switch",
+        "EnableNat": false,
+        "Nat": {
+          "Name": "ContainerNAT",
+          "PortBindings": null
+        }
+      },
+      "Settings": null
+    }
+  ],
+  "IgnoreFlushesDuringBoot": true,
+  "LayerFolderPath": "C:\\ProgramData\\garden-windows\\windowsfilter\\%s",
+  "Layers": [
+    {
+      "ID": "f0d4aaa3-c43d-59c1-8ad0-44e6b3381efc",
+      "Path": "C:\\ProgramData\\Microsoft\\Windows\\Images\\CN=Microsoft_WindowsServerCore_10.0.10514.0"
+    }
+  ]
+}`
 
-	return result
+	configuration = fmt.Sprintf(configurationTemplate)
+
+	err := hcsshim.CreateComputeSystem(id, configuration)
+	if err != nil {
+		return nil, err
+	}
+
+	result.WindowsContainerSpec.Properties = properties
+
+	return result, nil
 }
 
 func (container *container) Handle() string {
-	container.logger.Debug("PELERINUL: Handle")
+	container.logger.Debug("WC: Handle")
 	return container.handle
 }
 
@@ -105,40 +128,17 @@ func (container *container) Handle() string {
 // Errors:
 // * None.
 func (container *container) Stop(kill bool) error {
-	container.logger.Debug("PELERINUL: Stop")
+	container.logger.Debug("WC: Stop")
 
 	container.runMutex.Lock()
 	defer container.runMutex.Unlock()
-
-	//ole.CoInitializeEx(0, ole.COINIT_MULTITHREADED)
-
-	isLocked, errr := oleutil.CallMethod(container.prison, "IsLockedDown")
-	if errr != nil {
-		container.logger.Error("Error trying to retrieve prison lockdown status", errr)
-	}
-	defer isLocked.Clear()
-	blocked := isLocked.Value().(bool)
-
-	if blocked == true {
-		container.logger.Info(fmt.Sprintf("Stop with kill", kill))
-		_, errr = oleutil.CallMethod(container.prison, "Terminate")
-		if errr != nil {
-			container.logger.Error("Error trying to stop prison", errr)
-		}
-
-		if kill == true {
-			container.destroy()
-		}
-	}
-
-	return errr
 
 	return nil
 }
 
 // Returns information about a container.
 func (container *container) Info() (garden.ContainerInfo, error) {
-	container.logger.Debug("PELERINUL: Info")
+	container.logger.Debug("WC: Info")
 
 	properties, _ := container.Properties()
 
@@ -174,7 +174,7 @@ func (container *container) Info() (garden.ContainerInfo, error) {
 // Errors:
 // *  TODO.
 func (container *container) StreamIn(dstPath string, source io.Reader) error {
-	container.logger.Debug("PELERINUL: StreamIn")
+	container.logger.Debug("WC: StreamIn")
 
 	container.logger.Info(fmt.Sprintf("StreamIn dstPath:", dstPath))
 
@@ -216,7 +216,7 @@ func (container *container) StreamIn(dstPath string, source io.Reader) error {
 // Errors:
 // * TODO.
 func (container *container) StreamOut(srcPath string) (io.ReadCloser, error) {
-	container.logger.Debug("PELERINUL: StreamOut")
+	container.logger.Debug("WC: StreamOut")
 
 	container.logger.Info(fmt.Sprintf("StreamOut srcPath:", srcPath))
 
@@ -266,7 +266,7 @@ func (container *container) StreamOut(srcPath string) (io.ReadCloser, error) {
 
 // Limits the network bandwidth for a container.
 func (container *container) LimitBandwidth(limits garden.BandwidthLimits) error {
-	container.logger.Debug("PELERINUL: LimitBandwidth")
+	container.logger.Debug("WC: LimitBandwidth")
 
 	container.logger.Info("TODO LimitBandwidth")
 	return nil
@@ -370,37 +370,17 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 	container.logger.Info(fmt.Sprintf("Run command: ", spec.Path, spec.Args, spec.Dir, spec.User, spec.Env))
 
 	cmdPath := "C:\\Windows\\System32\\cmd.exe"
-	rootPath := filepath.Join(container.rootPath, container.handle)
-	strings.Replace(rootPath, "/", "\\", -1)
-
-	spec.Dir = filepath.Join(rootPath, spec.Dir)
-
-	if !filepath.IsAbs(spec.Path) {
-		spec.Path = filepath.Join(rootPath, spec.Path)
-	}
-
 	envs := spec.Env
-
-	// TOTO: remove this (HACK?!) port overriding
-	// after somebody cleans up this hardcoded values:
-	// https://github.com/cloudfoundry-incubator/app-manager/blob/master/start_message_builder/start_message_builder.go#L182
-	envs = append(envs, "NETIN_PORT="+strconv.FormatUint(uint64(container.lastNetInPort), 10))
-	envs = append(envs, "PORT="+strconv.FormatUint(uint64(container.lastNetInPort), 10))
-
-	containerPath := filepath.Join(container.rootPath, container.handle)
-
-	envs = append(envs, "HOMEPATH="+containerPath)
-	envs = append(envs, "HOME="+filepath.Join(containerPath, "app"))
 
 	containerRunInfo, err := prison_client.CreateContainerRunInfo()
 
 	defer func() {
-		container.logger.Debug("PELERINUL: Releasing container run info ...")
+		container.logger.Debug("WC: Releasing container run info ...")
 		containerRunInfo.Release()
 	}()
 
 	if err != nil {
-		container.logger.Error("Error trying to create ContainerRunInfo for a prison", err)
+		container.logger.Error("Error trying to create ContainerRunInfo for a container", err)
 		return nil, err
 	}
 
@@ -464,61 +444,9 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 		container.logger.Info(fmt.Sprintf("Stdin pipe closed", stdinWriter))
 	}()
 
-	isLocked, errr := oleutil.CallMethod(container.prison, "IsLockedDown")
-	if errr != nil {
-		container.logger.Error("Error trying to retrieve prison lock-down status", errr)
-	}
-
-	defer func() {
-		container.logger.Debug("PELERINUL: Clearing isLocked response ...")
-		isLocked.Clear()
-	}()
-
-	if isLocked.Value().(bool) == false {
-
-		oleutil.PutProperty(container.prison, "HomePath", rootPath)
-		oleutil.PutProperty(container.prison, "NetworkPort", uint(container.lastNetInPort))
-		oleutil.PutProperty(container.prison, "MemoryLimitBytes", int64(1024*1024*512))
-
-		container.logger.Info("Locking down...")
-		_, errr = oleutil.CallMethod(container.prison, "Lockdown")
-		if errr != nil {
-			container.logger.Error("Error trying to lock prison down", errr)
-			return nil, errr
-		}
-		container.logger.Info("Locked down.")
-	}
-
 	container.logger.Info("Running process...")
 
-	iDcri, _ := containerRunInfo.GetIDispatch()
-
-	defer func() {
-		container.logger.Debug("PELERINUL: Releasing container run information interface ...")
-		iDcri.Release()
-	}()
-
-	ptrackerRes, errr := oleutil.CallMethod(container.prison, "Run", iDcri)
-
-	defer func() {
-		container.logger.Debug("PELERINUL: Clearing process tracker response ...")
-		ptrackerRes.Clear()
-	}()
-
-	if errr != nil {
-		container.logger.Error("Error trying to run process in prison", errr)
-		return nil, errr
-	}
-
-	ptracker := ptrackerRes.ToIDispatch()
-	ptracker.AddRef() // ToIDispatch does not increase ref count
-
-	defer func() {
-		container.logger.Debug("PELERINUL: Releasing process tracker ...")
-		ptracker.Release()
-	}()
-
-	pt := prison_client.NewProcessTracker(ptracker)
+	pt := prison_client.NewProcessTracker()
 
 	container.logger.Debug("Container run created new process.", lager.Data{
 		"PID": pt.ID(),
@@ -555,10 +483,10 @@ func (container *container) Properties() (garden.Properties, error) {
 	defer container.propertiesMutex.RUnlock()
 
 	container.logger.Info("getting-properties", lager.Data{
-		"properties": container.PrisonContainerSpec.Properties,
+		"properties": container.WindowsContainerSpec.Properties,
 	})
 
-	return container.PrisonContainerSpec.Properties, nil
+	return container.WindowsContainerSpec.Properties, nil
 }
 
 // Property returns the value of the property with the specified name.
@@ -571,7 +499,7 @@ func (container *container) Property(name string) (string, error) {
 	container.propertiesMutex.RLock()
 	defer container.propertiesMutex.RUnlock()
 
-	value, found := container.PrisonContainerSpec.Properties[name]
+	value, found := container.WindowsContainerSpec.Properties[name]
 	if !found {
 		return "", UndefinedPropertyError{name}
 	}
@@ -590,13 +518,13 @@ func (container *container) SetProperty(name string, value string) error {
 	defer container.propertiesMutex.Unlock()
 
 	props := garden.Properties{}
-	for k, v := range container.PrisonContainerSpec.Properties {
+	for k, v := range container.WindowsContainerSpec.Properties {
 		props[k] = v
 	}
 
 	props[name] = value
 
-	container.PrisonContainerSpec.Properties = props
+	container.WindowsContainerSpec.Properties = props
 
 	return nil
 }
@@ -611,37 +539,18 @@ func (container *container) RemoveProperty(name string) error {
 	container.propertiesMutex.Lock()
 	defer container.propertiesMutex.Unlock()
 
-	if _, found := container.PrisonContainerSpec.Properties[name]; !found {
+	if _, found := container.WindowsContainerSpec.Properties[name]; !found {
 		return UndefinedPropertyError{name}
 	}
 
-	delete(container.PrisonContainerSpec.Properties, name)
+	delete(container.WindowsContainerSpec.Properties, name)
 
 	return nil
 }
 
 func (container *container) destroy() error {
-	container.logger.Debug("PELERINUL: Destroy")
+	container.logger.Debug("WC: Destroy")
 
-	defer container.prison.Release()
-
-	isLocked, errr := oleutil.CallMethod(container.prison, "IsLockedDown")
-	if errr != nil {
-		container.logger.Error("Error trying to retrive prison lock-down status", errr)
-	}
-	defer isLocked.Clear()
-	blocked := isLocked.Value().(bool)
-
-	if blocked == true {
-
-		container.logger.Info("Invoking destory on prison")
-		_, errr = oleutil.CallMethod(container.prison, "Destroy")
-		if errr != nil {
-			container.logger.Error("Error trying to destroy prison", errr)
-			return errr
-		}
-		container.logger.Info(fmt.Sprintf("Container destroyed: ", container.id))
-	}
 	return nil
 }
 

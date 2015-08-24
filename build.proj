@@ -7,7 +7,7 @@
     Restores nuget packages
   
   /t:GatherPackages
-    Creates a bin directoy and copies all Prison binaries in it
+    Creates a bin directoy and copies all binaries in it
     
   /t:GetHacks
     Installs go packages used whilst hacking on the code base and other dependencies (like msbuild community tasks)
@@ -18,28 +18,11 @@
     <!-- Directory containing this .proj file -->
     <ProjectRoot>$(MSBuildThisFileDirectory)</ProjectRoot>
 
-    <!-- Path to the packages.config file -->
-    <PackagesConfigFile>&quot;$(ProjectRoot)\prison\packages.config&quot;</PackagesConfigFile>
-  
-    <!-- Path to where the nuget packages get restored -->
-    <NugetPackagesDirNoQuotes>$(ProjectRoot)\prison\packages</NugetPackagesDirNoQuotes>
-    <NugetPackagesDir>&quot;$(NugetPackagesDirNoQuotes)&quot;</NugetPackagesDir>
-
-    <!-- Extra nuget server to use when downloading packages -->
-    <NugetRepo>http://nuget.15.126.229.131.xip.io/nuget</NugetRepo>
-
-    <!-- Path to nuget.exe -->
-    <NuGetCommand>&quot;$(ProjectRoot)\prison\.nuget\nuget.exe&quot;</NuGetCommand>
-
-    <!-- Path to where all prison assemblies and dependencies get copied -->
-    <BinDirNoQuotes>$(ProjectRoot)prison\bin\</BinDirNoQuotes>
-    <BinDir>&quot;$(BinDirNoQuotes)&quot;</BinDir>
-    
-    <!-- Path to regasm.exe -->
-    <RegAsmCommand>$(WINDIR)\Microsoft.NET\Framework64\v4.0.30319\regasm.exe</RegAsmCommand>
-    
+	<!-- Path to nuget.exe -->
+    <NuGetCommand>&quot;$(ProjectRoot)\windows-tools\.nuget\nuget.exe&quot;</NuGetCommand>
+	
     <!-- Path to location of msbuild tasks -->
-    <MSBuildTasksDirectory>$(ProjectRoot)\prison\msbuild\</MSBuildTasksDirectory>
+    <MSBuildTasksDirectory>$(ProjectRoot)\windows-tools\msbuild\</MSBuildTasksDirectory>
 
     <!-- Name of msbuild community tasks nuget package -->
     <MSBuildPackage>MSBuildTasks</MSBuildPackage>
@@ -54,7 +37,6 @@
     <DiegoArtifactsDir>$(ProjectRoot)\diego\artifacts</DiegoArtifactsDir>
     <ConsulDownloadURL>https://dl.bintray.com/mitchellh/consul/0.5.2_windows_386.zip</ConsulDownloadURL>
     <ConsulZipFile>$(DiegoArtifactsDir)\consul.zip</ConsulZipFile>
-    
   </PropertyGroup>
 
   <!-- Imports -->
@@ -74,46 +56,11 @@
     
   </Target>
   
-
-  <!-- Target for restoring nuget packages -->
-  <Target Name="RestoreNugetPackages" DependsOnTargets="UnregisterCOM">
-    <RemoveDir Directories="$(NugetPackagesDirNoQuotes)" />
-    <Exec Command="$(NuGetCommand) restore $(PackagesConfigFile) -source $(NugetRepo) -PackagesDirectory $(NugetPackagesDir)"/>
-  </Target>
-
-  <!-- Target for creating the bin directory with all required prison assemblies and artifacts -->
-  <Target Name="GatherPrisonAssemblies" DependsOnTargets="RestoreNugetPackages">
-    <RemoveDir Directories="$(BinDirNoQuotes)" />
-    <MakeDir Directories="$(BinDirNoQuotes)"/>
-
-    <ItemGroup>
-      <Artifacts Include="$(NugetPackagesDirNoQuotes)\windows-prison*\lib\net45\*" />
-      <Artifacts Include="$(NugetPackagesDirNoQuotes)\windows-prison*\Content\*" />
-      <Artifacts Include="$(NugetPackagesDirNoQuotes)\alphafs*\lib\net45\*" />
-      <Artifacts Include="$(NugetPackagesDirNoQuotes)\ini.net*\lib\net20\*" />
-      <Artifacts Include="$(NugetPackagesDirNoQuotes)\nlog*\lib\net45\*" />
-    </ItemGroup>
-
-    <Copy SourceFiles="@(Artifacts)" DestinationFolder="$(BinDirNoQuotes)" />
-    <Message Text="Prison assemblies copied to $(BinDir)" />
-  </Target>
-
-  <!-- Target for unregistering the COM Windows Prison -->
-  <Target Name="UnregisterCOM">
-    <Exec Condition="Exists('$(BinDir)\CloudFoundry.WindowsPrison.ComWrapper.dll')" 
-          Command="$(RegAsmCommand) &quot;$(BinDirNoQuotes)CloudFoundry.WindowsPrison.ComWrapper.dll&quot; /unregister" />
-  </Target>
-
-  <!-- Target for registering the COM Windows Prison -->
-  <Target Name="RegisterCOM" DependsOnTargets="GatherPrisonAssemblies">
-    <Exec Command="$(RegAsmCommand) /verbose /tlb /codebase &quot;$(BinDirNoQuotes)CloudFoundry.WindowsPrison.ComWrapper.dll&quot;" />
-  </Target>
-
   <!-- Target for installing go packages and other dependecies for hacking -->
   <Target Name="GetHacks" DependsOnTargets="MSBuildCommunityTasks">
     <ItemGroup>
-      <Packages Include="github.com/go-ole/go-ole" />
       <Packages Include="github.com/natefinch/npipe" />
+	  <Packages Include="github.com/Microsoft/hcsshim" />
     </ItemGroup>
 
     <Exec Command="go get %(Packages.identity)"/>
@@ -164,16 +111,6 @@
     <Copy SourceFiles="%(DiegoProj.Identity)\%(DiegoProj.Artifact)" DestinationFolder="$(DiegoArtifactsDir)" />
   </Target>
 
-  <!-- Target for copying prison assemblies for a diego cell -->
-  <Target Name="CopyDiegoPrisonAssemblies" DependsOnTargets="GatherPrisonAssemblies" AfterTargets="AssembleDiego">
-    <ItemGroup>
-      <PrisonAssemblies Include="$(BinDirNoQuotes)\*.*" />
-    </ItemGroup>
-
-    <MakeDir Directories="$(DiegoArtifactsDir)\prison" />
-    <Copy SourceFiles="@(PrisonAssemblies)" DestinationFolder="$(DiegoArtifactsDir)\prison" />
-  </Target>
-  
   <!-- List of scripts and configuration files that need to be a part of a Diego cell -->
   <ItemGroup>
     <DiegoFile Include="$(ProjectRoot)\lattice\diego-dev-ctl.ps1">
@@ -186,10 +123,6 @@
     
     <DiegoFile Include="$(ProjectRoot)\lattice\config\windows-lattice.json">
       <ArtifactDestinationDir>$(DiegoArtifactsDir)\config</ArtifactDestinationDir>
-    </DiegoFile>
-
-    <DiegoFile Include="$(ProjectRoot)\lattice\config\NLog.config">
-      <ArtifactDestinationDir>$(DiegoArtifactsDir)\</ArtifactDestinationDir>
     </DiegoFile>
   </ItemGroup>
 

@@ -11,12 +11,10 @@ import (
 
 	"github.com/cloudfoundry-incubator/garden"
 	"github.com/cloudfoundry-incubator/garden-windows/container"
-	"github.com/go-ole/go-ole"
-	"github.com/go-ole/go-ole/oleutil"
 	"github.com/pivotal-golang/lager"
 )
 
-type prisonBackend struct {
+type windowsContainerBackend struct {
 	containerBinaryPath string
 	containerRootPath   string
 	hostIP              string
@@ -28,14 +26,14 @@ type prisonBackend struct {
 	containersMutex *sync.RWMutex
 }
 
-func NewPrisonBackend(containerRootPath string, logger lager.Logger, hostIP string) (*prisonBackend, error) {
-	logger.Debug("PELERINUL: prisonBackend.NewPrisonBackend")
+func NewWindowsContainerBackend(containerRootPath string, logger lager.Logger, hostIP string) (*windowsContainerBackend, error) {
+	logger.Debug("WCB: windowsContainerBackend.NewWindowsContainerBackend")
 
 	containerIDs := make(chan string)
 
 	go generateContainerIDs(containerIDs)
 
-	return &prisonBackend{
+	return &windowsContainerBackend{
 		containerRootPath: containerRootPath,
 		hostIP:            hostIP,
 
@@ -47,56 +45,31 @@ func NewPrisonBackend(containerRootPath string, logger lager.Logger, hostIP stri
 	}, nil
 }
 
-func (prisonBackend *prisonBackend) Start() error {
-	prisonBackend.logger.Debug("PELERINUL: prisonBackend.Start")
+func (windowsContainerBackend *windowsContainerBackend) Start() error {
+	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.Start")
 
-	err := ole.CoInitializeEx(0, ole.COINIT_MULTITHREADED)
-
-	if err != nil {
-		return err
-	}
-
-	containerManager, err := oleutil.CreateObject("CloudFoundry.WindowsPrison.ComWrapper.ContainerManager")
-
-	if err != nil {
-		return err
-	}
-
-	iContainerManager, err := containerManager.QueryInterface(ole.IID_IDispatch)
-
-	if err != nil {
-		return err
-	}
-
-	_, err = oleutil.CallMethod(iContainerManager, "InitPrison")
-
-	if err != nil {
-		prisonBackend.logger.Error("Error initializing prison", err)
-		return err
-	}
-
-	prisonBackend.logger.Info("Prison backend started")
+	windowsContainerBackend.logger.Info("Windows container backend started")
 
 	return nil
 }
 
-func (prisonBackend *prisonBackend) Stop() {
-	prisonBackend.logger.Info("Prison backend stopped")
+func (windowsContainerBackend *windowsContainerBackend) Stop() {
+	windowsContainerBackend.logger.Info("Prison backend stopped")
 }
 
-func (prisonBackend *prisonBackend) GraceTime(garden.Container) time.Duration {
-	prisonBackend.logger.Debug("PELERINUL: prisonBackend.GraceTime")
+func (windowsContainerBackend *windowsContainerBackend) GraceTime(garden.Container) time.Duration {
+	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.GraceTime")
 	// time after which to destroy idle containers
 	return 0
 }
 
-func (prisonBackend *prisonBackend) Ping() error {
-	prisonBackend.logger.Debug("PELERINUL: prisonBackend.Ping")
+func (windowsContainerBackend *windowsContainerBackend) Ping() error {
+	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.Ping")
 	return nil
 }
 
-func (prisonBackend *prisonBackend) Capacity() (garden.Capacity, error) {
-	prisonBackend.logger.Debug("PELERINUL: prisonBackend.Capacity")
+func (windowsContainerBackend *windowsContainerBackend) Capacity() (garden.Capacity, error) {
+	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.Capacity")
 
 	capacity := garden.Capacity{
 		MemoryInBytes: 8 * 1024 * 1024 * 1024,
@@ -106,57 +79,61 @@ func (prisonBackend *prisonBackend) Capacity() (garden.Capacity, error) {
 	return capacity, nil
 }
 
-func (prisonBackend *prisonBackend) Create(containerSpec garden.ContainerSpec) (garden.Container, error) {
-	prisonBackend.logger.Info("prison backend is going to create a new container")
+func (windowsContainerBackend *windowsContainerBackend) Create(containerSpec garden.ContainerSpec) (garden.Container, error) {
+	windowsContainerBackend.logger.Info("WCB: backend is going to create a new container")
 
-	id := <-prisonBackend.containerIDs
+	id := <-windowsContainerBackend.containerIDs
 
 	handle := id
 	if containerSpec.Handle != "" {
 		handle = containerSpec.Handle
 	}
 
-	container := container.NewContainer(id, handle, prisonBackend.containerRootPath, prisonBackend.logger, prisonBackend.hostIP, containerSpec.Properties)
+	container, err := container.NewContainer(id, handle, windowsContainerBackend.containerRootPath, windowsContainerBackend.logger, windowsContainerBackend.hostIP, containerSpec.Properties)
 
-	prisonBackend.containersMutex.Lock()
-	prisonBackend.containers[handle] = container
-	prisonBackend.containersMutex.Unlock()
+	if err != nil {
+		return nil, err
+	}
+
+	windowsContainerBackend.containersMutex.Lock()
+	windowsContainerBackend.containers[handle] = container
+	windowsContainerBackend.containersMutex.Unlock()
 
 	return container, nil
 }
 
-func (prisonBackend *prisonBackend) Destroy(handle string) error {
-	prisonBackend.logger.Debug("PELERINUL: prisonBackend.Destroy")
+func (windowsContainerBackend *windowsContainerBackend) Destroy(handle string) error {
+	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.Destroy")
 	return nil
 }
 
-func (prisonBackend *prisonBackend) Containers(garden.Properties) (containers []garden.Container, err error) {
-	prisonBackend.logger.Debug("PELERINUL: prisonBackend.Containers")
-	prisonBackend.containersMutex.RLock()
-	defer prisonBackend.containersMutex.RUnlock()
+func (windowsContainerBackend *windowsContainerBackend) Containers(garden.Properties) (containers []garden.Container, err error) {
+	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.Containers")
+	windowsContainerBackend.containersMutex.RLock()
+	defer windowsContainerBackend.containersMutex.RUnlock()
 
-	for _, container := range prisonBackend.containers {
+	for _, container := range windowsContainerBackend.containers {
 		containers = append(containers, container)
 	}
 
 	return containers, nil
 }
 
-func (prisonBackend *prisonBackend) Lookup(handle string) (garden.Container, error) {
-	prisonBackend.logger.Debug("PELERINUL: prisonBackend.Lookup")
-	return prisonBackend.containers[handle], nil
+func (windowsContainerBackend *windowsContainerBackend) Lookup(handle string) (garden.Container, error) {
+	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.Lookup")
+	return windowsContainerBackend.containers[handle], nil
 }
 
 // BulkInfo returns info or error for a list of containers.
-func (prisonBackend *prisonBackend) BulkInfo(handles []string) (map[string]garden.ContainerInfoEntry, error) {
-	prisonBackend.logger.Debug("PELERINUL: prisonBackend.BulkInfo")
+func (windowsContainerBackend *windowsContainerBackend) BulkInfo(handles []string) (map[string]garden.ContainerInfoEntry, error) {
+	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.BulkInfo")
 
 	result := make(map[string]garden.ContainerInfoEntry)
 
 	for i := 0; i < len(handles); i++ {
 		handle := handles[i]
 
-		cont, err := prisonBackend.Lookup(handle)
+		cont, err := windowsContainerBackend.Lookup(handle)
 
 		if err != nil {
 			result[handle] = garden.ContainerInfoEntry{
@@ -194,8 +171,8 @@ func (prisonBackend *prisonBackend) BulkInfo(handles []string) (map[string]garde
 }
 
 // BulkMetrics returns metrics or error for a list of containers.
-func (prisonBackend *prisonBackend) BulkMetrics(handles []string) (map[string]garden.ContainerMetricsEntry, error) {
-	prisonBackend.logger.Debug("PELERINUL: prisonBackend.BulkMetrics")
+func (windowsContainerBackend *windowsContainerBackend) BulkMetrics(handles []string) (map[string]garden.ContainerMetricsEntry, error) {
+	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.BulkMetrics")
 	return nil, nil
 }
 

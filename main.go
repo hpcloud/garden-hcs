@@ -51,17 +51,17 @@ func main() {
 	flag.Parse()
 
 	logger, _ := cf_lager.New("garden-windows")
-	logger.Info("Pelerinul e viu", lager.Data{
+	logger.Info("Garden Windows started.", lager.Data{
 		"info": filepath.IsAbs("c:\\windows\\system32\\"),
 	})
 
-	prisonBackend, err := backend.NewPrisonBackend("c:\\workspace\\prison", logger, *cellIP)
+	windowsContainerBackend, err := backend.NewWindowsContainerBackend("c:\\workspace\\prison", logger, *cellIP)
 	if err != nil {
 		logger.Fatal("Server Failed to Start", err)
 		os.Exit(1)
 	}
 
-	gardenServer := server.New(*listenNetwork, *listenAddr, *containerGraceTime, prisonBackend, logger)
+	gardenServer := server.New(*listenNetwork, *listenAddr, *containerGraceTime, windowsContainerBackend, logger)
 	err = gardenServer.Start()
 	if err != nil {
 		logger.Fatal("Server Failed to Start", err)
@@ -79,7 +79,7 @@ func main() {
 		<-signals
 		gardenServer.Stop()
 
-		logger.Info("Pelerinul zice: na ca s-o oprit")
+		logger.Info("Garden Windows stopped")
 
 		os.Exit(0)
 	}()
