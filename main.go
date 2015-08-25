@@ -1,16 +1,22 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
+	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
 
+	"code.google.com/p/go-uuid/uuid"
+	"github.com/Microsoft/hcsshim"
 	"github.com/cloudfoundry-incubator/cf-lager"
-	"github.com/cloudfoundry-incubator/garden-windows/backend"
 	"github.com/cloudfoundry-incubator/garden/server"
 	"github.com/pivotal-golang/lager"
+
+	"github.com/cloudfoundry-incubator/garden-windows/backend"
+	"github.com/cloudfoundry-incubator/garden-windows/windows_containers"
 )
 
 var containerGraceTime = flag.Duration(
@@ -19,7 +25,79 @@ var containerGraceTime = flag.Duration(
 	"time after which to destroy idle containers",
 )
 
+//func dir(id string) string {
+//	return filepath.Join(d.info.HomeDir, filepath.Base(id))
+//}
+
+//func resolveId(id string) (string, error) {
+//	content, err := ioutil.ReadFile(filepath.Join(d.dir(id), "layerId"))
+//	if os.IsNotExist(err) {
+//		return id, nil
+//	} else if err != nil {
+//		return "", err
+//	}
+//	return string(content), nil
+//}
+
 func main() {
+
+	imageRepositoryLocation := "c:\\garden-windows\\mytest"
+	sharedBaseImageName := "WindowsServerCore"
+	driverInfo := windows_containers.NewDriverInfo(imageRepositoryLocation)
+	layerId := "windows-garden-rootfs"
+
+	sharedBaseImage, err := windows_containers.GetSharedBaseImageByName(sharedBaseImageName)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	mp, err := hcsshim.GetLayerMountPath(driverInfo, sharedBaseImage.GetId())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Println(mp)
+
+	err = hcsshim.CreateLayer(driverInfo, layerId, sharedBaseImage.GetId())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	wgrfsmp, err := hcsshim.GetLayerMountPath(driverInfo, layerId)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println(wgrfsmp)
+
+	name := uuid.New()
+
+	cu := &windows_containers.ContainerInit{
+		SystemType:              "Container",
+		Name:                    name,
+		Owner:                   windows_containers.DefaultOwner,
+		IsDummy:                 false,
+		VolumePath:              `\\?\Volume{bd05d44f-0000-0000-0000-100000000000}\`, //c.Rootfs,
+		IgnoreFlushesDuringBoot: true,                                                //c.FirstStart,
+		LayerFolderPath:         mp,                                                  //c.LayerFolder,
+	}
+
+	//	configuration := fmt.Sprintf(configurationTemplate, name, mp, imageRepositoryLocation, layerId, mp)
+
+	configurationb, err := json.Marshal(cu)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	configuration := string(configurationb)
+
+	err = hcsshim.CreateComputeSystem(name, configuration)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return
 
 	defaultListNetwork := "tcp"
 	defaultListAddr := "0.0.0.0:58008"
