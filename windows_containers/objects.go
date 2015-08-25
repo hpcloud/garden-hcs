@@ -20,7 +20,7 @@ const defaultContainerNAT = "ContainerNAT"
 // of garden-windows.
 const DefaultOwner = "garden-windows"
 
-type layer struct {
+type Layer struct {
 	ID   string
 	Path string
 }
@@ -66,5 +66,5 @@ type ContainerInit struct {
 	Devices                 []device // Devices used by the container
 	IgnoreFlushesDuringBoot bool     // Optimisation hint for container startup in Windows
 	LayerFolderPath         string   // Where the layer folders are located
-	Layers                  []layer  // List of storage layers
+	Layers                  []Layer  // List of storage layers
 }
