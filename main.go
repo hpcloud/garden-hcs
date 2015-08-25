@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"log"
@@ -40,65 +41,6 @@ var containerGraceTime = flag.Duration(
 //}
 
 func main() {
-
-	imageRepositoryLocation := "c:\\garden-windows\\mytest"
-	sharedBaseImageName := "WindowsServerCore"
-	driverInfo := windows_containers.NewDriverInfo(imageRepositoryLocation)
-	layerId := "windows-garden-rootfs"
-
-	sharedBaseImage, err := windows_containers.GetSharedBaseImageByName(sharedBaseImageName)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	mp, err := hcsshim.GetLayerMountPath(driverInfo, sharedBaseImage.GetId())
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Println(mp)
-
-	err = hcsshim.CreateLayer(driverInfo, layerId, sharedBaseImage.GetId())
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	wgrfsmp, err := hcsshim.GetLayerMountPath(driverInfo, layerId)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Println(wgrfsmp)
-
-	name := uuid.New()
-
-	cu := &windows_containers.ContainerInit{
-		SystemType:              "Container",
-		Name:                    name,
-		Owner:                   windows_containers.DefaultOwner,
-		IsDummy:                 false,
-		VolumePath:              `\\?\Volume{bd05d44f-0000-0000-0000-100000000000}\`, //c.Rootfs,
-		IgnoreFlushesDuringBoot: true,                                                //c.FirstStart,
-		LayerFolderPath:         mp,                                                  //c.LayerFolder,
-	}
-
-	//	configuration := fmt.Sprintf(configurationTemplate, name, mp, imageRepositoryLocation, layerId, mp)
-
-	configurationb, err := json.Marshal(cu)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	configuration := string(configurationb)
-
-	err = hcsshim.CreateComputeSystem(name, configuration)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return
-
 	defaultListNetwork := "tcp"
 	defaultListAddr := "0.0.0.0:58008"
 
@@ -132,6 +74,120 @@ func main() {
 	logger.Info("Garden Windows started.", lager.Data{
 		"info": filepath.IsAbs("c:\\windows\\system32\\"),
 	})
+
+	// hacking code until return
+
+	imageRepositoryLocation := "c:\\garden-windows\\containers"
+	sharedBaseImageName := "WindowsServerCore"
+	driverInfo := windows_containers.NewDriverInfo(imageRepositoryLocation)
+	containerId := uuid.New()
+
+	b, err := backend.NewWindowsContainerBackend(imageRepositoryLocation, logger, *cellIP)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	sharedBaseImage, err := windows_containers.GetSharedBaseImageByName(sharedBaseImageName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println(sharedBaseImage.GetId())
+	log.Println(sharedBaseImage.Path)
+
+	baseImageMountPath, err := hcsshim.GetLayerMountPath(driverInfo, sharedBaseImage.GetId())
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println(baseImageMountPath)
+
+	layerChain := []string{baseImageMountPath}
+
+	// Try to cleanup after ourselves
+	defer func() {
+		hcsshim.ShutdownComputeSystem(containerId)
+		hcsshim.TerminateComputeSystem(containerId)
+		hcsshim.DeactivateLayer(driverInfo, containerId)
+		hcsshim.DestroyLayer(driverInfo, containerId)
+	}()
+
+	err = hcsshim.CreateSandboxLayer(driverInfo, containerId, layerChain[0], layerChain)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	rootfs, err := b.GetRootFSForID(containerId, layerChain)
+
+	layerFolderPath := b.Dir(containerId)
+	log.Println(layerFolderPath)
+
+	cu := &windows_containers.ContainerInit{
+		SystemType:              "Container",
+		Name:                    containerId,
+		Owner:                   windows_containers.DefaultOwner,
+		IsDummy:                 false,
+		VolumePath:              rootfs,          //c.Rootfs,
+		IgnoreFlushesDuringBoot: true,            //c.FirstStart,
+		LayerFolderPath:         layerFolderPath, //c.LayerFolder,
+		Layers:                  []windows_containers.Layer{},
+	}
+
+	for i := 0; i < len(layerChain); i++ {
+		_, filename := filepath.Split(layerChain[i])
+		g, err := hcsshim.NameToGuid(filename)
+		if err != nil {
+			log.Fatal(err)
+		}
+		cu.Layers = append(cu.Layers, windows_containers.Layer{
+			ID:   g.ToString(),
+			Path: layerChain[i],
+		})
+	}
+
+	configurationb, err := json.Marshal(cu)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	configuration := string(configurationb)
+
+	err = hcsshim.CreateComputeSystem(containerId, configuration)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = hcsshim.StartComputeSystem(containerId)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	createProcessParms := hcsshim.CreateProcessParams{
+		EmulateConsole:   false,
+		WorkingDirectory: "c:\\",
+		ConsoleSize:      [2]int{80, 120},
+		CommandLine:      "cmd /c dir",
+	}
+
+	pid, _, stdout, _, err := hcsshim.CreateProcessInComputeSystem(containerId, false, true, false, createProcessParms)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println(pid)
+
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(stdout)
+
+	exitCode, err := hcsshim.WaitForProcessInComputeSystem(containerId, pid)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Println(exitCode)
+
+	s := buf.String()
+	log.Println(s)
+
+	return
 
 	windowsContainerBackend, err := backend.NewWindowsContainerBackend("c:\\workspace\\prison", logger, *cellIP)
 	if err != nil {

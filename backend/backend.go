@@ -5,10 +5,7 @@ package backend
 import "C"
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -216,33 +213,12 @@ func (b *windowsContainerBackend) Dir(id string) string {
 	return filepath.Join(b.driverInfo.HomeDir, filepath.Base(id))
 }
 
-func (b *windowsContainerBackend) resolveLayerId(id string) (string, error) {
-	content, err := ioutil.ReadFile(filepath.Join(b.Dir(id), "layerId"))
-	if os.IsNotExist(err) {
-		return id, nil
-	} else if err != nil {
-		return "", err
-	}
-	return string(content), nil
-}
-
 // Get returns the rootfs path for the id. This will mount the dir at it's given path
-func (b *windowsContainerBackend) GetRootFSForID(id, mountLabel string) (string, error) {
+func (b *windowsContainerBackend) GetRootFSForID(rId string, layerChain []string) (string, error) {
 	var dir string
 
 	b.containersMutex.Lock()
 	defer b.containersMutex.Unlock()
-
-	rId, err := b.resolveLayerId(id)
-	if err != nil {
-		return "", err
-	}
-
-	// Getting the layer paths must be done outside of the lock.
-	layerChain, err := b.getLayerChain(rId)
-	if err != nil {
-		return "", err
-	}
 
 	if b.active[rId] == 0 {
 		if err := hcsshim.ActivateLayer(b.driverInfo, rId); err != nil {
@@ -250,7 +226,7 @@ func (b *windowsContainerBackend) GetRootFSForID(id, mountLabel string) (string,
 		}
 		if err := hcsshim.PrepareLayer(b.driverInfo, rId, layerChain); err != nil {
 			if err2 := hcsshim.DeactivateLayer(b.driverInfo, rId); err2 != nil {
-				b.logger.Info(fmt.Sprintf("Failed to Deactivate %s: %s", id, err))
+				b.logger.Info(fmt.Sprintf("Failed to Deactivate %s: %s", rId, err))
 			}
 			return "", err
 		}
@@ -259,7 +235,7 @@ func (b *windowsContainerBackend) GetRootFSForID(id, mountLabel string) (string,
 	mountPath, err := hcsshim.GetLayerMountPath(b.driverInfo, rId)
 	if err != nil {
 		if err2 := hcsshim.DeactivateLayer(b.driverInfo, rId); err2 != nil {
-			b.logger.Info(fmt.Sprintf("Failed to Deactivate %s: %s", id, err))
+			b.logger.Info(fmt.Sprintf("Failed to Deactivate %s: %s", rId, err))
 		}
 		return "", err
 	}
@@ -271,26 +247,8 @@ func (b *windowsContainerBackend) GetRootFSForID(id, mountLabel string) (string,
 	if mountPath != "" {
 		dir = mountPath
 	} else {
-		dir = b.Dir(id)
+		dir = b.Dir(rId)
 	}
 
 	return dir, nil
-}
-
-func (b *windowsContainerBackend) getLayerChain(id string) ([]string, error) {
-	jPath := filepath.Join(b.Dir(id), "layerchain.json")
-	content, err := ioutil.ReadFile(jPath)
-	if os.IsNotExist(err) {
-		return nil, nil
-	} else if err != nil {
-		return nil, fmt.Errorf("Unable to read layerchain file - %s", err)
-	}
-
-	var layerChain []string
-	err = json.Unmarshal(content, &layerChain)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to unmarshall layerchain json - %s", err)
-	}
-
-	return layerChain, nil
 }
