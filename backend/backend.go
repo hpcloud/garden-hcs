@@ -5,13 +5,21 @@ package backend
 import "C"
 
 import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/Microsoft/hcsshim"
 	"github.com/cloudfoundry-incubator/garden"
-	"github.com/cloudfoundry-incubator/garden-windows/container"
 	"github.com/pivotal-golang/lager"
+
+	"github.com/cloudfoundry-incubator/garden-windows/container"
+	"github.com/cloudfoundry-incubator/garden-windows/windows_containers"
 )
 
 type windowsContainerBackend struct {
@@ -24,6 +32,9 @@ type windowsContainerBackend struct {
 	containerIDs    <-chan string
 	containers      map[string]garden.Container
 	containersMutex *sync.RWMutex
+
+	driverInfo hcsshim.DriverInfo
+	active     map[string]int
 }
 
 func NewWindowsContainerBackend(containerRootPath string, logger lager.Logger, hostIP string) (*windowsContainerBackend, error) {
@@ -42,6 +53,9 @@ func NewWindowsContainerBackend(containerRootPath string, logger lager.Logger, h
 		containerIDs:    containerIDs,
 		containers:      make(map[string]garden.Container),
 		containersMutex: new(sync.RWMutex),
+
+		driverInfo: windows_containers.NewDriverInfo(containerRootPath),
+		active:     map[string]int{},
 	}, nil
 }
 
@@ -191,4 +205,92 @@ func generateContainerIDs(ids chan<- string) string {
 
 		ids <- string(containerID)
 	}
+}
+
+// *************************************************************************
+// This is where we start implementing things we need for windows containers
+// Based on https://github.com/docker/docker/blob/2e7b088164960b7981a058f34336c05dc52f2c53/daemon/graphdriver/windows/windows.go
+// *************************************************************************
+
+func (b *windowsContainerBackend) Dir(id string) string {
+	return filepath.Join(b.driverInfo.HomeDir, filepath.Base(id))
+}
+
+func (b *windowsContainerBackend) resolveLayerId(id string) (string, error) {
+	content, err := ioutil.ReadFile(filepath.Join(b.Dir(id), "layerId"))
+	if os.IsNotExist(err) {
+		return id, nil
+	} else if err != nil {
+		return "", err
+	}
+	return string(content), nil
+}
+
+// Get returns the rootfs path for the id. This will mount the dir at it's given path
+func (b *windowsContainerBackend) GetRootFSForID(id, mountLabel string) (string, error) {
+	var dir string
+
+	b.containersMutex.Lock()
+	defer b.containersMutex.Unlock()
+
+	rId, err := b.resolveLayerId(id)
+	if err != nil {
+		return "", err
+	}
+
+	// Getting the layer paths must be done outside of the lock.
+	layerChain, err := b.getLayerChain(rId)
+	if err != nil {
+		return "", err
+	}
+
+	if b.active[rId] == 0 {
+		if err := hcsshim.ActivateLayer(b.driverInfo, rId); err != nil {
+			return "", err
+		}
+		if err := hcsshim.PrepareLayer(b.driverInfo, rId, layerChain); err != nil {
+			if err2 := hcsshim.DeactivateLayer(b.driverInfo, rId); err2 != nil {
+				b.logger.Info(fmt.Sprintf("Failed to Deactivate %s: %s", id, err))
+			}
+			return "", err
+		}
+	}
+
+	mountPath, err := hcsshim.GetLayerMountPath(b.driverInfo, rId)
+	if err != nil {
+		if err2 := hcsshim.DeactivateLayer(b.driverInfo, rId); err2 != nil {
+			b.logger.Info(fmt.Sprintf("Failed to Deactivate %s: %s", id, err))
+		}
+		return "", err
+	}
+
+	b.active[rId]++
+
+	// If the layer has a mount path, use that. Otherwise, use the
+	// folder path.
+	if mountPath != "" {
+		dir = mountPath
+	} else {
+		dir = b.Dir(id)
+	}
+
+	return dir, nil
+}
+
+func (b *windowsContainerBackend) getLayerChain(id string) ([]string, error) {
+	jPath := filepath.Join(b.Dir(id), "layerchain.json")
+	content, err := ioutil.ReadFile(jPath)
+	if os.IsNotExist(err) {
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("Unable to read layerchain file - %s", err)
+	}
+
+	var layerChain []string
+	err = json.Unmarshal(content, &layerChain)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to unmarshall layerchain json - %s", err)
+	}
+
+	return layerChain, nil
 }
