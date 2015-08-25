@@ -1,7 +1,6 @@
 package windows_containers
 
 import (
-	"crypto/sha512"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -56,8 +55,6 @@ func NewDriverInfo(homeDir string) hcsshim.DriverInfo {
 
 func (image *SharedBaseImage) GetId() string {
 	_, folderName := filepath.Split(image.Path)
-	h := sha512.Sum384([]byte(folderName))
-	id := fmt.Sprintf("%x", h[:32])
 
-	return id
+	return folderName
 }
