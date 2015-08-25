@@ -95,7 +95,9 @@ func NewContainer(id, handle string, rootPath string, logger lager.Logger, hostI
   ]
 }`
 
-	configuration = fmt.Sprintf(configurationTemplate)
+	// TODO: vladi: Get this value automatically
+	volumePath := `\\?\Volume{bd05d44f-0000-0000-0000-100000000000}\`
+	configuration := fmt.Sprintf(configurationTemplate, id, volumePath, id)
 
 	err := hcsshim.CreateComputeSystem(id, configuration)
 	if err != nil {
@@ -173,12 +175,12 @@ func (container *container) Info() (garden.ContainerInfo, error) {
 //
 // Errors:
 // *  TODO.
-func (container *container) StreamIn(dstPath string, source io.Reader) error {
+func (container *container) StreamIn(spec garden.StreamInSpec) error {
 	container.logger.Debug("WC: StreamIn")
 
-	container.logger.Info(fmt.Sprintf("StreamIn dstPath:", dstPath))
+	container.logger.Info(fmt.Sprintf("StreamIn dstPath:", spec.Path))
 
-	absDestPath := filepath.Join(container.rootPath, container.handle, dstPath)
+	absDestPath := filepath.Join(container.rootPath, container.handle, spec.Path)
 	container.logger.Info(fmt.Sprintf("Streaming in to file: ", absDestPath))
 
 	err := os.MkdirAll(absDestPath, 0777)
@@ -200,7 +202,7 @@ func (container *container) StreamIn(dstPath string, source io.Reader) error {
 			"-C",
 			"./",
 		},
-		Stdin: source,
+		Stdin: spec.TarStream,
 	}
 
 	err = cmd.Run()
@@ -215,17 +217,17 @@ func (container *container) StreamIn(dstPath string, source io.Reader) error {
 //
 // Errors:
 // * TODO.
-func (container *container) StreamOut(srcPath string) (io.ReadCloser, error) {
+func (container *container) StreamOut(spec garden.StreamOutSpec) (io.ReadCloser, error) {
 	container.logger.Debug("WC: StreamOut")
 
-	container.logger.Info(fmt.Sprintf("StreamOut srcPath:", srcPath))
+	container.logger.Info(fmt.Sprintf("StreamOut srcPath:", spec.Path))
 
 	containerPath := filepath.Join(container.rootPath, container.handle)
 
-	workingDir := filepath.Dir(srcPath)
-	compressArg := filepath.Base(srcPath)
-	if strings.HasSuffix(srcPath, "/") {
-		workingDir = srcPath
+	workingDir := filepath.Dir(spec.Path)
+	compressArg := filepath.Base(spec.Path)
+	if strings.HasSuffix(spec.Path, "/") {
+		workingDir = spec.Path
 		compressArg = "."
 	}
 
