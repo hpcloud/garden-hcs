@@ -49,6 +49,10 @@ func GetSharedBaseImageByName(name string) (*SharedBaseImage, error) {
 func NewDriverInfo(homeDir string) hcsshim.DriverInfo {
 	return hcsshim.DriverInfo{
 		HomeDir: homeDir,
+		// There are two types of drivers for container support on Windows
+		// filterDriver and diffDriver
+		// So far, only the filterDriver seems to work ok.
+		// It also looks like this is the driver used for Docker on Windows
 		Flavour: filterDriver,
 	}
 }
