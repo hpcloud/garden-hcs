@@ -36,41 +36,36 @@ func (err UndefinedPropertyError) Error() string {
 type container struct {
 	id     string
 	handle string
-
 	logger lager.Logger
-
-	rootPath string
-	hostIP   string
+	hostIP string
 
 	WindowsContainerSpec
 
-	rpc           *rpc.Client
-	pids          map[int]*prison_client.ProcessTracker
-	lastNetInPort uint32
-
+	rpc             *rpc.Client
+	pids            map[int]*prison_client.ProcessTracker
+	lastNetInPort   uint32
 	runMutex        sync.Mutex
 	propertiesMutex sync.RWMutex
-
-	driverInfo hcsshim.DriverInfo
-	active     int
+	driverInfo      hcsshim.DriverInfo
+	active          int
 }
 
-func NewContainer(id, handle string, rootPath string, logger lager.Logger, hostIP string, driverInfo hcsshim.DriverInfo, properties garden.Properties) (*container, error) {
+func NewContainer(id, handle, rootfs string, logger lager.Logger, hostIP string, driverInfo hcsshim.DriverInfo, properties garden.Properties) (*container, error) {
 	logger.Debug("WC: NewContainer")
 
 	result := &container{
 		id:     id,
 		handle: handle,
 
-		rootPath: rootPath,
-		hostIP:   hostIP,
-		logger:   logger,
+		hostIP: hostIP,
+		logger: logger,
 
 		pids:       make(map[int]*prison_client.ProcessTracker),
 		driverInfo: driverInfo,
 		active:     0,
 	}
 
+	result.RootFSPath = rootfs
 	result.WindowsContainerSpec.Properties = properties
 
 	// Get the shared base image based on our "RootFSPath"
@@ -202,7 +197,7 @@ func (container *container) StreamIn(spec garden.StreamInSpec) error {
 
 	container.logger.Info(fmt.Sprintf("StreamIn dstPath:", spec.Path))
 
-	absDestPath := filepath.Join(container.rootPath, container.handle, spec.Path)
+	absDestPath := filepath.Join(container.driverInfo.HomeDir, container.handle, spec.Path)
 	container.logger.Info(fmt.Sprintf("Streaming in to file: ", absDestPath))
 
 	err := os.MkdirAll(absDestPath, 0777)
@@ -244,7 +239,7 @@ func (container *container) StreamOut(spec garden.StreamOutSpec) (io.ReadCloser,
 
 	container.logger.Info(fmt.Sprintf("StreamOut srcPath:", spec.Path))
 
-	containerPath := filepath.Join(container.rootPath, container.handle)
+	containerPath := filepath.Join(container.driverInfo.HomeDir, container.handle)
 
 	workingDir := filepath.Dir(spec.Path)
 	compressArg := filepath.Base(spec.Path)
@@ -393,110 +388,75 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 
 	container.logger.Info(fmt.Sprintf("Run command: ", spec.Path, spec.Args, spec.Dir, spec.User, spec.Env))
 
-	cmdPath := "C:\\Windows\\System32\\cmd.exe"
-	envs := spec.Env
+	//	containerRunInfo.SetFilename(cmdPath)
+	//	containerRunInfo.SetArguments(concatArgs)
 
-	containerRunInfo, err := prison_client.CreateContainerRunInfo()
+	//	stdinWriter, err := containerRunInfo.StdinPipe()
+	//	if err != nil {
+	//		return nil, err
+	//	}
 
-	defer func() {
-		container.logger.Debug("WC: Releasing container run info ...")
-		containerRunInfo.Release()
-	}()
+	//	stdoutReader, err := containerRunInfo.StdoutPipe()
+	//	if err != nil {
+	//		return nil, err
+	//	}
 
-	if err != nil {
-		container.logger.Error("Error trying to create ContainerRunInfo for a container", err)
-		return nil, err
-	}
+	//	stderrReader, err := containerRunInfo.StderrPipe()
+	//	if err != nil {
+	//		return nil, err
+	//	}
 
-	for _, env := range envs {
-		spltiEnv := strings.SplitN(env, "=", 2)
-		containerRunInfo.AddEnvironmentVariable(spltiEnv[0], spltiEnv[1])
-	}
-
+	// Combine all arguments using ' ' as a separator
 	concatArgs := ""
 	for _, v := range spec.Args {
 		concatArgs = concatArgs + " " + v
 	}
 
-	spec.Path = strings.Replace(spec.Path, "/", "\\", -1)
+	// Create the command line that we're going to run
+	commandLine := fmt.Sprintf("%s %s", spec.Path, concatArgs)
 
-	concatArgs = " /c " + spec.Path + " " + concatArgs
-	container.logger.Info(fmt.Sprintf("Filename ", spec.Path, "Arguments: ", concatArgs, "Concat Args: ", concatArgs))
+	// TODO: Investigate what exactly EmulateConsole does,
+	// as well as console size
+	createProcessParms := hcsshim.CreateProcessParams{
+		EmulateConsole:   false,
+		WorkingDirectory: spec.Dir,
+		ConsoleSize:      [2]int{80, 120},
+		CommandLine:      commandLine,
+	}
 
-	containerRunInfo.SetFilename(cmdPath)
-	containerRunInfo.SetArguments(concatArgs)
+	pid, stdin, stdout, stderr, err := hcsshim.CreateProcessInComputeSystem(
+		container.id,
+		pio.Stdin != nil,
+		pio.Stdout != nil,
+		pio.Stderr != nil,
+		createProcessParms,
+	)
 
-	stdinWriter, err := containerRunInfo.StdinPipe()
+	go func() {
+		if pio.Stdout != nil {
+			io.Copy(pio.Stdout, stdout)
+			stdout.Close()
+		}
+	}()
+
+	go func() {
+		if pio.Stderr != nil {
+			io.Copy(pio.Stderr, stderr)
+			stderr.Close()
+		}
+	}()
+
+	go func() {
+		if pio.Stdin != nil {
+			io.Copy(stdin, pio.Stdin)
+			stdin.Close()
+		}
+	}()
 	if err != nil {
 		return nil, err
 	}
 
-	stdoutReader, err := containerRunInfo.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-
-	stderrReader, err := containerRunInfo.StderrPipe()
-	if err != nil {
-		return nil, err
-	}
-
-	go func() {
-		container.logger.Info(fmt.Sprintf("Streaming stdout ", stdoutReader))
-
-		io.Copy(pio.Stdout, stdoutReader)
-		stdoutReader.Close()
-
-		container.logger.Info(fmt.Sprintf("Stdout pipe closed", stdoutReader))
-	}()
-
-	go func() {
-		container.logger.Info(fmt.Sprintf("Streaming stderr ", stderrReader))
-
-		io.Copy(pio.Stderr, stderrReader)
-		stderrReader.Close()
-
-		container.logger.Info(fmt.Sprintf("Stderr pipe closed", stderrReader))
-	}()
-
-	go func() {
-		container.logger.Info(fmt.Sprintf("Streaming stdin ", stdinWriter))
-
-		io.Copy(stdinWriter, pio.Stdin)
-		stdinWriter.Close()
-
-		container.logger.Info(fmt.Sprintf("Stdin pipe closed", stdinWriter))
-	}()
-
-	container.logger.Info("Running process...")
-
-	//	createProcessParms := hcsshim.CreateProcessParams{
-	//		EmulateConsole:   false,
-	//		WorkingDirectory: "c:\\",
-	//		ConsoleSize:      [2]int{80, 120},
-	//		CommandLine:      "cmd /c dir",
-	//	}
-
-	//	pid, _, stdout, _, err := hcsshim.CreateProcessInComputeSystem(containerId, false, true, false, createProcessParms)
-	//	if err != nil {
-	//		log.Fatal(err)
-	//	}
-	//	log.Println(pid)
-
-	//	buf := new(bytes.Buffer)
-	//	buf.ReadFrom(stdout)
-
-	//	exitCode, err := hcsshim.WaitForProcessInComputeSystem(containerId, pid)
-	//	if err != nil {
-	//		log.Fatal(err)
-	//	}
-
-	//	log.Println(exitCode)
-
-	//	s := buf.String()
-	//	log.Println(s)
-
-	pt := prison_client.NewProcessTracker()
+	pt := prison_client.NewProcessTracker(container.id, pid, container.driverInfo)
 
 	container.logger.Debug("Container run created new process.", lager.Data{
 		"PID": pt.ID(),
@@ -602,10 +562,6 @@ func (container *container) destroy() error {
 	container.logger.Debug("WC: Destroy")
 
 	return nil
-}
-
-func (container *container) getContainerPath() string {
-	return filepath.Join(container.rootPath, container.handle)
 }
 
 func freeTcp4Port() uint32 {

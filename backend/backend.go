@@ -98,6 +98,7 @@ func (windowsContainerBackend *windowsContainerBackend) Create(containerSpec gar
 	container, err := container.NewContainer(
 		id,
 		handle,
+		containerSpec.RootFSPath,
 		windowsContainerBackend.containerRootPath,
 		windowsContainerBackend.logger,
 		windowsContainerBackend.hostIP,

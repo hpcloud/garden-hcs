@@ -1,16 +1,23 @@
 package prison_client
 
 import (
-	"log"
-
+	"github.com/Microsoft/hcsshim"
 	"github.com/cloudfoundry-incubator/garden"
 )
 
 type ProcessTracker struct {
+	pid         uint32
+	containerId string
+	driverInfo  hcsshim.DriverInfo
 }
 
-func NewProcessTracker() *ProcessTracker {
-	ret := &ProcessTracker{}
+func NewProcessTracker(containerId string, pid uint32, driverInfo hcsshim.DriverInfo) *ProcessTracker {
+	ret := &ProcessTracker{
+		containerId: containerId,
+		pid:         pid,
+		driverInfo:  driverInfo,
+	}
+
 	return ret
 }
 
@@ -19,18 +26,29 @@ func (t *ProcessTracker) Release() error {
 }
 
 func (t *ProcessTracker) ID() uint32 {
-	return 0
+	return t.pid
 }
 
 func (t *ProcessTracker) Wait() (int, error) {
-	return 0, nil
+	exitCode, err := hcsshim.WaitForProcessInComputeSystem(
+		t.containerId,
+		t.pid,
+	)
+
+	return int(exitCode), err
 }
 
 func (t *ProcessTracker) SetTTY(garden.TTYSpec) error {
-	log.Println("TODO: ProcessTracker SetTTY")
+	// TODO: Investigate what this is supposed to do
+	// and how it can be implemented on Windows
 	return nil
 }
 
 func (process ProcessTracker) Signal(signal garden.Signal) error {
-	return nil
+	err := hcsshim.TerminateProcessInComputeSystem(
+		process.containerId,
+		process.pid,
+	)
+
+	return err
 }

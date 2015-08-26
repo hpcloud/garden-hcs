@@ -61,6 +61,8 @@
     <ItemGroup>
       <Packages Include="github.com/natefinch/npipe" />
 	  <Packages Include="github.com/Microsoft/hcsshim" />
+	  <Packages Include="code.google.com/p/go-uuid/uuid" />
+	  <Packages Include="github.com/stretchr/testify/assert" />
     </ItemGroup>
 
     <Exec Command="go get %(Packages.identity)"/>
