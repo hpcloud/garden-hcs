@@ -5,8 +5,6 @@ package backend
 import "C"
 
 import (
-	"fmt"
-	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -31,7 +29,6 @@ type windowsContainerBackend struct {
 	containersMutex *sync.RWMutex
 
 	driverInfo hcsshim.DriverInfo
-	active     map[string]int
 }
 
 func NewWindowsContainerBackend(containerRootPath string, logger lager.Logger, hostIP string) (*windowsContainerBackend, error) {
@@ -52,7 +49,6 @@ func NewWindowsContainerBackend(containerRootPath string, logger lager.Logger, h
 		containersMutex: new(sync.RWMutex),
 
 		driverInfo: windows_containers.NewDriverInfo(containerRootPath),
-		active:     map[string]int{},
 	}, nil
 }
 
@@ -60,7 +56,6 @@ func (windowsContainerBackend *windowsContainerBackend) Start() error {
 	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.Start")
 
 	windowsContainerBackend.logger.Info("Windows container backend started")
-
 	return nil
 }
 
@@ -100,7 +95,15 @@ func (windowsContainerBackend *windowsContainerBackend) Create(containerSpec gar
 		handle = containerSpec.Handle
 	}
 
-	container, err := container.NewContainer(id, handle, windowsContainerBackend.containerRootPath, windowsContainerBackend.logger, windowsContainerBackend.hostIP, containerSpec.Properties)
+	container, err := container.NewContainer(
+		id,
+		handle,
+		windowsContainerBackend.containerRootPath,
+		windowsContainerBackend.logger,
+		windowsContainerBackend.hostIP,
+		windowsContainerBackend.driverInfo,
+		containerSpec.Properties,
+	)
 
 	if err != nil {
 		return nil, err
@@ -115,6 +118,9 @@ func (windowsContainerBackend *windowsContainerBackend) Create(containerSpec gar
 
 func (windowsContainerBackend *windowsContainerBackend) Destroy(handle string) error {
 	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.Destroy")
+
+	windowsContainerBackend.containers[handle].Stop(true)
+
 	return nil
 }
 
@@ -202,53 +208,4 @@ func generateContainerIDs(ids chan<- string) string {
 
 		ids <- string(containerID)
 	}
-}
-
-// *************************************************************************
-// This is where we start implementing things we need for windows containers
-// Based on https://github.com/docker/docker/blob/2e7b088164960b7981a058f34336c05dc52f2c53/daemon/graphdriver/windows/windows.go
-// *************************************************************************
-
-func (b *windowsContainerBackend) Dir(id string) string {
-	return filepath.Join(b.driverInfo.HomeDir, filepath.Base(id))
-}
-
-// Get returns the rootfs path for the id. This will mount the dir at it's given path
-func (b *windowsContainerBackend) GetRootFSForID(rId string, layerChain []string) (string, error) {
-	var dir string
-
-	b.containersMutex.Lock()
-	defer b.containersMutex.Unlock()
-
-	if b.active[rId] == 0 {
-		if err := hcsshim.ActivateLayer(b.driverInfo, rId); err != nil {
-			return "", err
-		}
-		if err := hcsshim.PrepareLayer(b.driverInfo, rId, layerChain); err != nil {
-			if err2 := hcsshim.DeactivateLayer(b.driverInfo, rId); err2 != nil {
-				b.logger.Info(fmt.Sprintf("Failed to Deactivate %s: %s", rId, err))
-			}
-			return "", err
-		}
-	}
-
-	mountPath, err := hcsshim.GetLayerMountPath(b.driverInfo, rId)
-	if err != nil {
-		if err2 := hcsshim.DeactivateLayer(b.driverInfo, rId); err2 != nil {
-			b.logger.Info(fmt.Sprintf("Failed to Deactivate %s: %s", rId, err))
-		}
-		return "", err
-	}
-
-	b.active[rId]++
-
-	// If the layer has a mount path, use that. Otherwise, use the
-	// folder path.
-	if mountPath != "" {
-		dir = mountPath
-	} else {
-		dir = b.Dir(rId)
-	}
-
-	return dir, nil
 }

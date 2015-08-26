@@ -1,21 +1,23 @@
 package container
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/rpc"
-	"path/filepath"
-	"strconv"
-	"sync"
-
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
+
+	"github.com/cloudfoundry-incubator/garden-windows/windows_client"
+	"github.com/cloudfoundry-incubator/garden-windows/windows_containers"
 
 	"github.com/Microsoft/hcsshim"
 	"github.com/cloudfoundry-incubator/garden"
-	"github.com/cloudfoundry-incubator/garden-windows/windows_client"
 	"github.com/pivotal-golang/lager"
 )
 
@@ -48,9 +50,12 @@ type container struct {
 
 	runMutex        sync.Mutex
 	propertiesMutex sync.RWMutex
+
+	driverInfo hcsshim.DriverInfo
+	active     int
 }
 
-func NewContainer(id, handle string, rootPath string, logger lager.Logger, hostIP string, properties garden.Properties) (*container, error) {
+func NewContainer(id, handle string, rootPath string, logger lager.Logger, hostIP string, driverInfo hcsshim.DriverInfo, properties garden.Properties) (*container, error) {
 	logger.Debug("WC: NewContainer")
 
 	result := &container{
@@ -61,50 +66,53 @@ func NewContainer(id, handle string, rootPath string, logger lager.Logger, hostI
 		hostIP:   hostIP,
 		logger:   logger,
 
-		pids: make(map[int]*prison_client.ProcessTracker),
+		pids:       make(map[int]*prison_client.ProcessTracker),
+		driverInfo: driverInfo,
+		active:     0,
 	}
 
-	// Name, VolumePath, Name
-	configurationTemplate := `{
-  "SystemType": "Container",
-  "Name": "%s",
-  "Owner": "garden-windows",
-  "IsDummy": false,
-  "VolumePath": "%s",
-  "Devices": [
-    {
-      "DeviceType": "Network",
-      "Connection": {
-        "NetworkName": "Virtual Switch",
-        "EnableNat": false,
-        "Nat": {
-          "Name": "ContainerNAT",
-          "PortBindings": null
-        }
-      },
-      "Settings": null
-    }
-  ],
-  "IgnoreFlushesDuringBoot": true,
-  "LayerFolderPath": "C:\\ProgramData\\garden-windows\\windowsfilter\\%s",
-  "Layers": [
-    {
-      "ID": "f0d4aaa3-c43d-59c1-8ad0-44e6b3381efc",
-      "Path": "C:\\ProgramData\\Microsoft\\Windows\\Images\\CN=Microsoft_WindowsServerCore_10.0.10514.0"
-    }
-  ]
-}`
+	result.WindowsContainerSpec.Properties = properties
 
-	// TODO: vladi: Get this value automatically
-	volumePath := `\\?\Volume{bd05d44f-0000-0000-0000-100000000000}\`
-	configuration := fmt.Sprintf(configurationTemplate, id, volumePath, id)
-
-	err := hcsshim.CreateComputeSystem(id, configuration)
+	// Get the shared base image based on our "RootFSPath"
+	// This should be something like "WindowsServerCore"
+	sharedBaseImage, err := windows_containers.GetSharedBaseImageByName(result.RootFSPath)
 	if err != nil {
 		return nil, err
 	}
 
-	result.WindowsContainerSpec.Properties = properties
+	// This implementation does not currently support a rootfs with multiple layers
+	// So we create our layer chain based on the base shared image
+	layerChain := []string{sharedBaseImage.Path}
+
+	// Next, create a sandbox layer for the container
+	// Our layer will have the same id as our container
+	err = hcsshim.CreateSandboxLayer(driverInfo, id, layerChain[0], layerChain)
+	if err != nil {
+		return nil, err
+	}
+
+	// Retrieve the mount path for the new layer
+	// This should be something like this: "\\?\Volume{bd05d44f-0000-0000-0000-100000000000}\"
+	mountPath, err := result.getMountPathForLayer(id, layerChain)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build a configuration json for creating a compute system
+	configuration, err := result.getComputeSystemConfiguration(mountPath, layerChain)
+
+	// Create a compute system.
+	// This is our container.
+	err = hcsshim.CreateComputeSystem(id, configuration)
+	if err != nil {
+		return nil, err
+	}
+
+	// Start the container
+	err = hcsshim.StartComputeSystem(id)
+	if err != nil {
+		return nil, err
+	}
 
 	return result, nil
 }
@@ -134,6 +142,20 @@ func (container *container) Stop(kill bool) error {
 
 	container.runMutex.Lock()
 	defer container.runMutex.Unlock()
+
+	// TODO: investigate how shutdown and terminate work.
+
+	// Shutdown the compute system
+	hcsshim.ShutdownComputeSystem(container.id)
+
+	// Terminate the compute system
+	hcsshim.TerminateComputeSystem(container.id)
+
+	// Deactivate our layer
+	hcsshim.DeactivateLayer(container.driverInfo, container.id)
+
+	// Destroy the sandbox layer
+	hcsshim.DestroyLayer(container.driverInfo, container.id)
 
 	return nil
 }
@@ -448,6 +470,32 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 
 	container.logger.Info("Running process...")
 
+	//	createProcessParms := hcsshim.CreateProcessParams{
+	//		EmulateConsole:   false,
+	//		WorkingDirectory: "c:\\",
+	//		ConsoleSize:      [2]int{80, 120},
+	//		CommandLine:      "cmd /c dir",
+	//	}
+
+	//	pid, _, stdout, _, err := hcsshim.CreateProcessInComputeSystem(containerId, false, true, false, createProcessParms)
+	//	if err != nil {
+	//		log.Fatal(err)
+	//	}
+	//	log.Println(pid)
+
+	//	buf := new(bytes.Buffer)
+	//	buf.ReadFrom(stdout)
+
+	//	exitCode, err := hcsshim.WaitForProcessInComputeSystem(containerId, pid)
+	//	if err != nil {
+	//		log.Fatal(err)
+	//	}
+
+	//	log.Println(exitCode)
+
+	//	s := buf.String()
+	//	log.Println(s)
+
 	pt := prison_client.NewProcessTracker()
 
 	container.logger.Debug("Container run created new process.", lager.Data{
@@ -566,4 +614,90 @@ func freeTcp4Port() uint32 {
 	freePort := strings.Split(l.Addr().String(), ":")[1]
 	ret, _ := strconv.ParseUint(freePort, 10, 32)
 	return uint32(ret)
+}
+
+// *************************************************************************
+// This is where we start implementing things we need for windows containers
+// Based on:
+// https://github.com/docker/docker/blob/master/daemon/execdriver/windows/windows.go
+// https://github.com/docker/docker/blob/master/daemon/execdriver/windows/run.go
+// https://github.com/docker/docker/blob/master/daemon/graphdriver/windows/windows.go
+// *************************************************************************
+
+func (c *container) dir(id string) string {
+	return filepath.Join(c.driverInfo.HomeDir, filepath.Base(id))
+}
+
+// Get returns the rootfs path for the id. This will mount the dir at it's given path
+func (c *container) getMountPathForLayer(rId string, layerChain []string) (string, error) {
+	var dir string
+
+	if c.active == 0 {
+		if err := hcsshim.ActivateLayer(c.driverInfo, rId); err != nil {
+			return "", err
+		}
+		if err := hcsshim.PrepareLayer(c.driverInfo, rId, layerChain); err != nil {
+			if err2 := hcsshim.DeactivateLayer(c.driverInfo, rId); err2 != nil {
+				c.logger.Info(fmt.Sprintf("Failed to Deactivate %s: %s", rId, err))
+			}
+			return "", err
+		}
+	}
+
+	mountPath, err := hcsshim.GetLayerMountPath(c.driverInfo, rId)
+	if err != nil {
+		if err2 := hcsshim.DeactivateLayer(c.driverInfo, rId); err2 != nil {
+			c.logger.Info(fmt.Sprintf("Failed to Deactivate %s: %s", rId, err))
+		}
+		return "", err
+	}
+
+	c.active++
+
+	// If the layer has a mount path, use that. Otherwise, use the
+	// folder path.
+	if mountPath != "" {
+		dir = mountPath
+	} else {
+		dir = c.dir(rId)
+	}
+
+	return dir, nil
+}
+
+func (c *container) getComputeSystemConfiguration(mountPath string, layerChain []string) (string, error) {
+	layerFolderPath := c.dir(c.id)
+
+	// TODO: investigate further when IgnoreFlushesDuringBoot should be false
+	cu := &windows_containers.ContainerInit{
+		SystemType:              "Container",
+		Name:                    c.id,
+		Owner:                   windows_containers.DefaultOwner,
+		IsDummy:                 false,
+		VolumePath:              mountPath,
+		IgnoreFlushesDuringBoot: true,
+		LayerFolderPath:         layerFolderPath,
+		Layers:                  []windows_containers.Layer{},
+	}
+
+	for i := 0; i < len(layerChain); i++ {
+		_, filename := filepath.Split(layerChain[i])
+		g, err := hcsshim.NameToGuid(filename)
+		if err != nil {
+			return "", err
+		}
+		cu.Layers = append(cu.Layers, windows_containers.Layer{
+			ID:   g.ToString(),
+			Path: layerChain[i],
+		})
+	}
+
+	configurationb, err := json.Marshal(cu)
+	if err != nil {
+		return "", err
+	}
+
+	configuration := string(configurationb)
+
+	return configuration, nil
 }
