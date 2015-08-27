@@ -52,13 +52,19 @@ func main() {
 		"Location where container images and other artifacts will be stored.",
 	)
 
+	var virtualSwitchName = flag.String(
+		"virtualSwitch",
+		"Virtual Switch",
+		"Location where container images and other artifacts will be stored.",
+	)
+
 	cf_lager.AddFlags(flag.CommandLine)
 	flag.Parse()
 
 	logger, _ := cf_lager.New("garden-windows")
 	logger.Info("Garden Windows started.")
 
-	windowsContainerBackend, err := backend.NewWindowsContainerBackend(*imageRepositoryLocation, logger, *cellIP)
+	windowsContainerBackend, err := backend.NewWindowsContainerBackend(*imageRepositoryLocation, *virtualSwitchName, logger, *cellIP)
 	if err != nil {
 		logger.Fatal("Server Failed to Start", err)
 		os.Exit(1)
