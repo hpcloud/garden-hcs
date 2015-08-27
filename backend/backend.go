@@ -28,10 +28,11 @@ type windowsContainerBackend struct {
 	containers      map[string]garden.Container
 	containersMutex *sync.RWMutex
 
-	driverInfo hcsshim.DriverInfo
+	driverInfo        hcsshim.DriverInfo
+	virtualSwitchName string
 }
 
-func NewWindowsContainerBackend(containerRootPath string, logger lager.Logger, hostIP string) (*windowsContainerBackend, error) {
+func NewWindowsContainerBackend(containerRootPath, virtualSwitchName string, logger lager.Logger, hostIP string) (*windowsContainerBackend, error) {
 	logger.Debug("WCB: windowsContainerBackend.NewWindowsContainerBackend")
 
 	containerIDs := make(chan string)
@@ -77,6 +78,8 @@ func (windowsContainerBackend *windowsContainerBackend) Ping() error {
 func (windowsContainerBackend *windowsContainerBackend) Capacity() (garden.Capacity, error) {
 	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.Capacity")
 
+	// TODO: these values should not be hardcoded
+
 	capacity := garden.Capacity{
 		MemoryInBytes: 8 * 1024 * 1024 * 1024,
 		DiskInBytes:   80 * 1024 * 1024 * 1024,
@@ -98,12 +101,11 @@ func (windowsContainerBackend *windowsContainerBackend) Create(containerSpec gar
 	container, err := container.NewContainer(
 		id,
 		handle,
-		containerSpec.RootFSPath,
-		windowsContainerBackend.containerRootPath,
+		containerSpec,
 		windowsContainerBackend.logger,
 		windowsContainerBackend.hostIP,
 		windowsContainerBackend.driverInfo,
-		containerSpec.Properties,
+		windowsContainerBackend.virtualSwitchName,
 	)
 
 	if err != nil {

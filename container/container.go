@@ -7,18 +7,24 @@ import (
 	"net"
 	"net/rpc"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/cloudfoundry-incubator/garden-windows/mountvol"
+	"github.com/cloudfoundry-incubator/garden-windows/untar"
 	"github.com/cloudfoundry-incubator/garden-windows/windows_client"
 	"github.com/cloudfoundry-incubator/garden-windows/windows_containers"
 
+	"code.google.com/p/go-uuid/uuid"
 	"github.com/Microsoft/hcsshim"
 	"github.com/cloudfoundry-incubator/garden"
 	"github.com/pivotal-golang/lager"
+)
+
+const (
+	ContainerPort = 8080
 )
 
 type WindowsContainerSpec struct {
@@ -41,32 +47,44 @@ type container struct {
 
 	WindowsContainerSpec
 
-	rpc             *rpc.Client
-	pids            map[int]*prison_client.ProcessTracker
-	lastNetInPort   uint32
+	rpc  *rpc.Client
+	pids map[int]*prison_client.ProcessTracker
+
+	hostPort      int
+	containerPort int
+
 	runMutex        sync.Mutex
 	propertiesMutex sync.RWMutex
 	driverInfo      hcsshim.DriverInfo
 	active          int
+	virtualSwitch   string
+	layerChain      []string
+	volumeName      string
 }
 
-func NewContainer(id, handle, rootfs string, logger lager.Logger, hostIP string, driverInfo hcsshim.DriverInfo, properties garden.Properties) (*container, error) {
+func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger lager.Logger, hostIP string, driverInfo hcsshim.DriverInfo, virtualSwitch string) (*container, error) {
 	logger.Debug("WC: NewContainer")
 
 	result := &container{
 		id:     id,
 		handle: handle,
 
-		hostIP: hostIP,
 		logger: logger,
 
-		pids:       make(map[int]*prison_client.ProcessTracker),
-		driverInfo: driverInfo,
-		active:     0,
+		pids:          make(map[int]*prison_client.ProcessTracker),
+		driverInfo:    driverInfo,
+		active:        0,
+		virtualSwitch: virtualSwitch,
 	}
 
-	result.RootFSPath = rootfs
-	result.WindowsContainerSpec.Properties = properties
+	result.RootFSPath = containerSpec.RootFSPath
+	result.WindowsContainerSpec.Properties = containerSpec.Properties
+
+	// We need to get an available port and map it now.
+	// This is because there is currently no way to change network settings
+	// for a compute system that's already been created.
+	result.hostPort = freeTcp4Port()
+	result.containerPort = ContainerPort
 
 	// Get the shared base image based on our "RootFSPath"
 	// This should be something like "WindowsServerCore"
@@ -77,24 +95,24 @@ func NewContainer(id, handle, rootfs string, logger lager.Logger, hostIP string,
 
 	// This implementation does not currently support a rootfs with multiple layers
 	// So we create our layer chain based on the base shared image
-	layerChain := []string{sharedBaseImage.Path}
+	result.layerChain = []string{sharedBaseImage.Path}
 
 	// Next, create a sandbox layer for the container
 	// Our layer will have the same id as our container
-	err = hcsshim.CreateSandboxLayer(driverInfo, id, layerChain[0], layerChain)
+	err = hcsshim.CreateSandboxLayer(driverInfo, id, result.layerChain[0], result.layerChain)
 	if err != nil {
 		return nil, err
 	}
 
 	// Retrieve the mount path for the new layer
 	// This should be something like this: "\\?\Volume{bd05d44f-0000-0000-0000-100000000000}\"
-	mountPath, err := result.getMountPathForLayer(id, layerChain)
+	result.volumeName, err = result.getMountPathForLayer(id, result.layerChain)
 	if err != nil {
 		return nil, err
 	}
 
 	// Build a configuration json for creating a compute system
-	configuration, err := result.getComputeSystemConfiguration(mountPath, layerChain)
+	configuration, err := result.getComputeSystemConfiguration(result.volumeName, result.layerChain)
 
 	// Create a compute system.
 	// This is our container.
@@ -171,7 +189,7 @@ func (container *container) Info() (garden.ContainerInfo, error) {
 		Properties:  properties,
 		MappedPorts: []garden.PortMapping{
 			garden.PortMapping{
-				HostPort:      container.lastNetInPort,
+				HostPort:      uint32(container.hostPort),
 				ContainerPort: 8080,
 			},
 		},
@@ -195,39 +213,28 @@ func (container *container) Info() (garden.ContainerInfo, error) {
 func (container *container) StreamIn(spec garden.StreamInSpec) error {
 	container.logger.Debug("WC: StreamIn")
 
-	container.logger.Info(fmt.Sprintf("StreamIn dstPath:", spec.Path))
+	// Get container directory
+	layerFolder := container.dir(container.id)
 
-	absDestPath := filepath.Join(container.driverInfo.HomeDir, container.handle, spec.Path)
-	container.logger.Info(fmt.Sprintf("Streaming in to file: ", absDestPath))
+	// Generate a temporary directory path
+	tempFolder := layerFolder + "-" + uuid.New()
 
-	err := os.MkdirAll(absDestPath, 0777)
+	// Mount the volume
+	err := mountvol.MountVolume(container.volumeName, tempFolder)
 	if err != nil {
-		container.logger.Error("Error trying to create destination path for in-stream", err)
+		return err
 	}
 
-	tarPath := "C:\\Program Files (x86)\\Git\\bin\\tar.exe"
-	cmdPath := "C:\\Windows\\System32\\cmd.exe"
+	// Dismount when we're done
+	defer mountvol.UnmountVolume(tempFolder)
 
-	cmd := &exec.Cmd{
-		Path: cmdPath,
-		Dir:  absDestPath,
-		Args: []string{
-			"/c",
-			tarPath,
-			"xf",
-			"-",
-			"-C",
-			"./",
-		},
-		Stdin: spec.TarStream,
-	}
-
-	err = cmd.Run()
+	// Write the tar stream to the directory
+	outDir := filepath.Join(tempFolder, spec.Path)
+	err = os.MkdirAll(outDir, 0755)
 	if err != nil {
-		container.logger.Error("Error trying to run tar for in-stream", err)
+		return err
 	}
-
-	return err
+	return untar.Untar(spec.TarStream, outDir)
 }
 
 // StreamOut streams a file out of a container.
@@ -237,50 +244,11 @@ func (container *container) StreamIn(spec garden.StreamInSpec) error {
 func (container *container) StreamOut(spec garden.StreamOutSpec) (io.ReadCloser, error) {
 	container.logger.Debug("WC: StreamOut")
 
-	container.logger.Info(fmt.Sprintf("StreamOut srcPath:", spec.Path))
+	// TODO: investigate a proper implementation
+	// It is unclear if it's ok to keep the container mounted until the reader
+	// is closed.
 
-	containerPath := filepath.Join(container.driverInfo.HomeDir, container.handle)
-
-	workingDir := filepath.Dir(spec.Path)
-	compressArg := filepath.Base(spec.Path)
-	if strings.HasSuffix(spec.Path, "/") {
-		workingDir = spec.Path
-		compressArg = "."
-	}
-
-	workingDir = filepath.Join(containerPath, workingDir)
-
-	tarRead, tarWrite := io.Pipe()
-
-	tarPath := "C:\\Program Files (x86)\\Git\\bin\\tar.exe"
-	cmdPath := "C:\\Windows\\System32\\cmd.exe"
-
-	cmd := &exec.Cmd{
-		Path: cmdPath,
-		// Dir:  workingDir,
-		Args: []string{
-			"/c",
-			tarPath,
-			"cf",
-			"-",
-			"-C",
-			workingDir,
-			compressArg,
-		},
-		Stdout: tarWrite,
-	}
-
-	err := cmd.Start()
-	if err != nil {
-		return nil, err
-	}
-
-	go func() {
-		cmd.Wait()
-		tarWrite.Close()
-	}()
-
-	return tarRead, nil
+	return nil, nil
 }
 
 // Limits the network bandwidth for a container.
@@ -355,9 +323,8 @@ func (container *container) CurrentMemoryLimits() (garden.MemoryLimits, error) {
 // * When no port can be acquired from the server's port pool.
 func (container *container) NetIn(hostPort, containerPort uint32) (uint32, uint32, error) {
 	container.logger.Info(fmt.Sprintf("TODO NetIn", hostPort, containerPort))
-	freePort := freeTcp4Port()
-	container.lastNetInPort = freePort
-	return freePort, freePort, nil
+
+	return uint32(container.hostPort), ContainerPort, nil
 }
 
 // Whitelist outbound network traffic.
@@ -388,24 +355,6 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 
 	container.logger.Info(fmt.Sprintf("Run command: ", spec.Path, spec.Args, spec.Dir, spec.User, spec.Env))
 
-	//	containerRunInfo.SetFilename(cmdPath)
-	//	containerRunInfo.SetArguments(concatArgs)
-
-	//	stdinWriter, err := containerRunInfo.StdinPipe()
-	//	if err != nil {
-	//		return nil, err
-	//	}
-
-	//	stdoutReader, err := containerRunInfo.StdoutPipe()
-	//	if err != nil {
-	//		return nil, err
-	//	}
-
-	//	stderrReader, err := containerRunInfo.StderrPipe()
-	//	if err != nil {
-	//		return nil, err
-	//	}
-
 	// Combine all arguments using ' ' as a separator
 	concatArgs := ""
 	for _, v := range spec.Args {
@@ -424,6 +373,7 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 		CommandLine:      commandLine,
 	}
 
+	// Create the process
 	pid, stdin, stdout, stderr, err := hcsshim.CreateProcessInComputeSystem(
 		container.id,
 		pio.Stdin != nil,
@@ -432,6 +382,7 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 		createProcessParms,
 	)
 
+	// Hook our stdin/stdout/stderr pipes
 	go func() {
 		if pio.Stdout != nil {
 			io.Copy(pio.Stdout, stdout)
@@ -456,6 +407,7 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 		return nil, err
 	}
 
+	// Create a new process tracker for the process we've just created
 	pt := prison_client.NewProcessTracker(container.id, pid, container.driverInfo)
 
 	container.logger.Debug("Container run created new process.", lager.Data{
@@ -564,12 +516,12 @@ func (container *container) destroy() error {
 	return nil
 }
 
-func freeTcp4Port() uint32 {
+func freeTcp4Port() int {
 	l, _ := net.Listen("tcp4", ":0")
 	defer l.Close()
 	freePort := strings.Split(l.Addr().String(), ":")[1]
 	ret, _ := strconv.ParseUint(freePort, 10, 32)
-	return uint32(ret)
+	return int(ret)
 }
 
 // *************************************************************************
@@ -634,6 +586,9 @@ func (c *container) getComputeSystemConfiguration(mountPath string, layerChain [
 		IgnoreFlushesDuringBoot: true,
 		LayerFolderPath:         layerFolderPath,
 		Layers:                  []windows_containers.Layer{},
+		Devices: []windows_containers.Device{
+			c.getComputeSystemNetworkDevice(),
+		},
 	}
 
 	for i := 0; i < len(layerChain); i++ {
@@ -656,4 +611,34 @@ func (c *container) getComputeSystemConfiguration(mountPath string, layerChain [
 	configuration := string(configurationb)
 
 	return configuration, nil
+}
+
+// This is a very basic implementation for port mappings
+// TODO: investigate how we can improve this, perhaps try to configure
+// port mappings on NetIn, not when the compute service is created
+func (c *container) getComputeSystemNetworkDevice() windows_containers.Device {
+
+	protocol := "TCP"
+	pbs := []windows_containers.PortBinding{
+		windows_containers.PortBinding{
+			ExternalPort: c.hostPort,
+			InternalPort: c.containerPort,
+			Protocol:     protocol,
+		},
+	}
+
+	dev := windows_containers.Device{
+		DeviceType: "Network",
+		Connection: &windows_containers.NetworkConnection{
+			NetworkName: c.virtualSwitch,
+			// TODO Windows: Fixme, next line. Needs HCS fix.
+			EnableNat: false,
+			Nat: windows_containers.NatSettings{
+				Name:         windows_containers.DefaultContainerNAT,
+				PortBindings: pbs,
+			},
+		},
+	}
+
+	return dev
 }
