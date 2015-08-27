@@ -141,45 +141,6 @@ function Check-Paths{[CmdletBinding()]param($daemon)
     mkdir $consulDataDir -ErrorAction 'SilentlyContinue' | out-null
 }
 
-function Register-Prison{[CmdletBinding()]param()
-    $prisonAssembly = Join-Path $binDir "prison\CloudFoundry.WindowsPrison.ComWrapper.dll"
-    $runtimeDir = [System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()
-    $regasmBin = Join-Path $runtimeDir "regasm.exe"
-
-    Write-Verbose "Registering prison COM assembly '${prisonAssembly}' ..."
-
-    $registerProcess = Start-Process -Wait -PassThru -NoNewWindow $regasmBin "/verbose /tlb /codebase `"${prisonAssembly}`""
-
-    if ($registerProcess.ExitCode -ne 0)
-    {
-        throw 'Registering assembly failed.'
-    }
-    else
-    {
-        Write-Verbose "Assembly registered successfully."
-    }
-}
-
-function Unregister-Prison{[CmdletBinding()]param()
-    $prisonAssembly = Join-Path $binDir "prison\CloudFoundry.WindowsPrison.ComWrapper.dll"
-    $runtimeDir = [System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()
-    $regasmBin = Join-Path $runtimeDir "regasm.exe"
-
-    Write-Verbose "Unregistering prison COM assembly '${prisonAssembly}' ..."
-
-    $registerProcess = Start-Process -Wait -PassThru -NoNewWindow $regasmBin "/verbose /unregister `"${prisonAssembly}`""
-
-    if ($registerProcess.ExitCode -ne 0)
-    {
-        throw 'Unregistering assembly failed.'
-    }
-    else
-    {
-        Write-Verbose "Assembly unregistered successfully."
-    }
-}
-
-
 try
 {
     if (![string]::IsNullOrWhiteSpace($DiegoBinDir))
@@ -236,6 +197,7 @@ try
     $repListenAddr = $latticeConfig.repListenAddr
     $repRootFSProvider = $latticeConfig.repRootFSProvider
     $repContainerMaxCpuShares = $latticeConfig.repContainerMaxCpuShares
+    $bbsAddress = $latticeConfig.bbsAddress
 
     $processes = @{
         "converger" = @{
@@ -243,7 +205,7 @@ try
             "stdout" = "converger.stdout.log";
             "stderr" = "converger.stderr.log";
             "pid" = "converger.pid";
-            "args" = "-etcdCluster ${etcdCluster} -consulCluster=`"${consulCluster}`"";
+            "args" = "-etcdCluster ${etcdCluster} -consulCluster=`"${consulCluster}`" -bbsAddress=`"${bbsAddress}`"";
         };
         "consul" = @{
             "exe" = "consul.exe";
@@ -257,14 +219,14 @@ try
             "stdout" = "rep.stdout.log";
             "stderr" = "rep.stderr.log";
             "pid" = "rep.pid";
-            "args" = "-etcdCluster ${etcdCluster} -consulCluster=`"${consulCluster}`" -cellID=${repCellID} -zone=${repZone} -rootFSProvider=${repRootFSProvider} -listenAddr=${repListenAddr} -gardenNetwork=${gardenListenNetwork} -gardenAddr=${gardenListenAddr} -memoryMB=${repMemoryMB} -diskMB=${repDiskMB} -containerMaxCpuShares=${repContainerMaxCpuShares}";
+            "args" = "-etcdCluster ${etcdCluster} -bbsAddress=`"${bbsAddress}`" -consulCluster=`"${consulCluster}`" -cellID=${repCellID} -zone=${repZone} -rootFSProvider=${repRootFSProvider} -listenAddr=${repListenAddr} -gardenNetwork=${gardenListenNetwork} -gardenAddr=${gardenListenAddr} -memoryMB=${repMemoryMB} -diskMB=${repDiskMB} -containerMaxCpuShares=${repContainerMaxCpuShares}";
         };
         "auctioneer" = @{
             "exe" = "auctioneer.exe";
             "stdout" = "auctioneer.stdout.log";
             "stderr" = "auctioneer.stderr.log";
             "pid" = "auctioneer.pid";
-            "args" = "-etcdCluster ${etcdCluster} -consulCluster=`"${consulCluster}`"";
+            "args" = "-etcdCluster ${etcdCluster} -consulCluster=`"${consulCluster}`" -bbsAddress=`"${bbsAddress}`"";
         };
         "garden" = @{
             "exe" = "garden-windows.exe";

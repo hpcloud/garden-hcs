@@ -1,16 +1,17 @@
 {
-  "etcdCluster": "http://192.168.11.11.xip.io:4001",
+  "etcdCluster": "http://10.0.1.2.xip.io:4001",
   "consulCluster": "http://127.0.0.1:8500",
   "gardenListenNetwork": "tcp",
   "gardenListenAddr": "127.0.0.1:58008",
   "gardenLogLevel": "info",
-  "gardenCellIP": "192.168.11.51",
-  "consulServerIp": "192.168.11.11",
-  "repCellID": "windows1",
+  "gardenCellIP": "10.0.1.6",
+  "consulServerIp": "10.0.1.2",
+  "repCellID": "windows-cell-0",
   "repZone": "z1",
   "repMemoryMB": "auto",
   "repDiskMB": "auto",
   "repListenAddr": "0.0.0.0:1700",
-  "repRootFSProvider": "win",
-  "repContainerMaxCpuShares": 1
+  "repRootFSProvider": "WindowsServerCore",
+  "repContainerMaxCpuShares": 1,
+  "bbsAddress": "http://bbs.service.dc1.consul:8889"
 }
