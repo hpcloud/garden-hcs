@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/Microsoft/hcsshim"
 )
@@ -26,13 +27,18 @@ func GetSharedBaseImages() (map[string]SharedBaseImage, error) {
 	json.Unmarshal([]byte(imageData), &images)
 
 	for _, image := range images.Images {
-		result[image.Name] = image
+		// We need to normalize our image names, since Diego
+		// does some matching with URIs
+		result[strings.ToLower(image.Name)] = image
 	}
 
 	return result, nil
 }
 
 func GetSharedBaseImageByName(name string) (*SharedBaseImage, error) {
+	// Normalize image name
+	name = strings.ToLower(name)
+
 	images, err := GetSharedBaseImages()
 
 	if err != nil {
@@ -43,7 +49,7 @@ func GetSharedBaseImageByName(name string) (*SharedBaseImage, error) {
 		return &image, nil
 	}
 
-	return nil, fmt.Errorf("Could not find shared base image %s.", name)
+	return nil, fmt.Errorf("Could not find shared base image '%s'.", name)
 }
 
 func NewDriverInfo(homeDir string) hcsshim.DriverInfo {
