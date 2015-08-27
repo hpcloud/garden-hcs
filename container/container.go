@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/rpc"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -69,6 +70,7 @@ func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger 
 		id:     id,
 		handle: handle,
 
+		hostIP: hostIP,
 		logger: logger,
 
 		pids:          make(map[int]*prison_client.ProcessTracker),
@@ -77,6 +79,7 @@ func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger 
 		virtualSwitch: virtualSwitch,
 	}
 
+	// The rootfs we need to use is the scheme from the
 	result.RootFSPath = containerSpec.RootFSPath
 	result.WindowsContainerSpec.Properties = containerSpec.Properties
 
@@ -87,8 +90,13 @@ func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger 
 	result.containerPort = ContainerPort
 
 	// Get the shared base image based on our "RootFSPath"
-	// This should be something like "WindowsServerCore"
-	sharedBaseImage, err := windows_containers.GetSharedBaseImageByName(result.RootFSPath)
+	// This should be something like "windowsservercore"
+	rootFSURL, err := url.Parse(result.RootFSPath)
+	if err != nil {
+		return nil, err
+	}
+	sharedBaseImageName := rootFSURL.Scheme
+	sharedBaseImage, err := windows_containers.GetSharedBaseImageByName(sharedBaseImageName)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +198,7 @@ func (container *container) Info() (garden.ContainerInfo, error) {
 		MappedPorts: []garden.PortMapping{
 			garden.PortMapping{
 				HostPort:      uint32(container.hostPort),
-				ContainerPort: 8080,
+				ContainerPort: ContainerPort,
 			},
 		},
 	}
@@ -364,6 +372,13 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 	// Create the command line that we're going to run
 	commandLine := fmt.Sprintf("%s %s", spec.Path, concatArgs)
 
+	// Create an env var map
+	envs := map[string]string{}
+	for _, env := range spec.Env {
+		spltiEnv := strings.SplitN(env, "=", 2)
+		envs[spltiEnv[0]] = spltiEnv[1]
+	}
+
 	// TODO: Investigate what exactly EmulateConsole does,
 	// as well as console size
 	createProcessParms := hcsshim.CreateProcessParams{
@@ -371,6 +386,7 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 		WorkingDirectory: spec.Dir,
 		ConsoleSize:      [2]int{80, 120},
 		CommandLine:      commandLine,
+		Environment:      envs,
 	}
 
 	// Create the process
@@ -381,6 +397,10 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 		pio.Stderr != nil,
 		createProcessParms,
 	)
+
+	if err != nil {
+		return nil, err
+	}
 
 	// Hook our stdin/stdout/stderr pipes
 	go func() {
@@ -403,9 +423,6 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 			stdin.Close()
 		}
 	}()
-	if err != nil {
-		return nil, err
-	}
 
 	// Create a new process tracker for the process we've just created
 	pt := prison_client.NewProcessTracker(container.id, pid, container.driverInfo)

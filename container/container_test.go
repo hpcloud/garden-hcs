@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"code.google.com/p/go-uuid/uuid"
 	"github.com/cloudfoundry-incubator/cf-lager"
@@ -33,7 +34,7 @@ func TestCreateContainer(t *testing.T) {
 
 	id := uuid.New()
 	handle := id
-	rootPath := "WindowsServerCore"
+	rootPath := "WindowsServerCore:dummy"
 	hostIP := "127.0.0.1"
 	virtualSwitch := "Virtual Switch"
 	driverInfo := windows_containers.NewDriverInfo("c:\\garden-windows\\tests")
@@ -58,7 +59,7 @@ func TestRunInContainer(t *testing.T) {
 
 	id := uuid.New()
 	handle := id
-	rootPath := "WindowsServerCore"
+	rootPath := "WindowsServerCore:dummy"
 	hostIP := "127.0.0.1"
 	virtualSwitch := "Virtual Switch"
 	driverInfo := windows_containers.NewDriverInfo("c:\\garden-windows\\tests")
@@ -104,7 +105,7 @@ func TestRunInContainerWithOutput(t *testing.T) {
 
 	id := uuid.New()
 	handle := id
-	rootPath := "WindowsServerCore"
+	rootPath := "WindowsServerCore:dummy"
 	hostIP := "127.0.0.1"
 	virtualSwitch := "Virtual Switch"
 	driverInfo := windows_containers.NewDriverInfo("c:\\garden-windows\\tests")
@@ -155,7 +156,7 @@ func TestRunInContainerWithNetwork(t *testing.T) {
 
 	id := uuid.New()
 	handle := id
-	rootPath := "WindowsServerCore"
+	rootPath := "WindowsServerCore:dummy"
 	hostIP := "127.0.0.1"
 	virtualSwitch := "Virtual Switch"
 	driverInfo := windows_containers.NewDriverInfo("c:\\garden-windows\\tests")
@@ -191,6 +192,9 @@ func TestRunInContainerWithNetwork(t *testing.T) {
 	_, err = container.Run(processSpec, pio)
 	assert.Nil(err)
 
+	// Sleep a bit, let the server start
+	time.Sleep(5000 * time.Millisecond)
+
 	resp, err := http.Get(fmt.Sprintf("http://%s:8080/", ipAddress))
 	assert.Nil(err)
 
@@ -208,7 +212,7 @@ func TestRunInContainerWithStreamIn(t *testing.T) {
 
 	id := uuid.New()
 	handle := id
-	rootPath := "WindowsServerCore"
+	rootPath := "WindowsServerCore:dummy"
 	hostIP := "127.0.0.1"
 	virtualSwitch := "Virtual Switch"
 	driverInfo := windows_containers.NewDriverInfo("c:\\garden-windows\\tests")
