@@ -49,7 +49,8 @@ func NewWindowsContainerBackend(containerRootPath, virtualSwitchName string, log
 		containers:      make(map[string]garden.Container),
 		containersMutex: new(sync.RWMutex),
 
-		driverInfo: windows_containers.NewDriverInfo(containerRootPath),
+		virtualSwitchName: virtualSwitchName,
+		driverInfo:        windows_containers.NewDriverInfo(containerRootPath),
 	}, nil
 }
 
@@ -122,7 +123,9 @@ func (windowsContainerBackend *windowsContainerBackend) Create(containerSpec gar
 func (windowsContainerBackend *windowsContainerBackend) Destroy(handle string) error {
 	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.Destroy")
 
-	windowsContainerBackend.containers[handle].Stop(true)
+	if container, ok := windowsContainerBackend.containers[handle]; ok {
+		container.Stop(true)
+	}
 
 	return nil
 }
@@ -193,7 +196,7 @@ func (windowsContainerBackend *windowsContainerBackend) BulkInfo(handles []strin
 // BulkMetrics returns metrics or error for a list of containers.
 func (windowsContainerBackend *windowsContainerBackend) BulkMetrics(handles []string) (map[string]garden.ContainerMetricsEntry, error) {
 	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.BulkMetrics")
-	return nil, nil
+	return map[string]garden.ContainerMetricsEntry{}, nil
 }
 
 func generateContainerIDs(ids chan<- string) string {
