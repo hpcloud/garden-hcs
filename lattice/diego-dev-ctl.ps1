@@ -197,6 +197,7 @@ try
     $repListenAddr = $latticeConfig.repListenAddr
     $repRootFSProvider = $latticeConfig.repRootFSProvider
     $repContainerMaxCpuShares = $latticeConfig.repContainerMaxCpuShares
+    $repContainerInodeLimit = $latticeConfig.repContainerInodeLimit
     $bbsAddress = $latticeConfig.bbsAddress
 
     $processes = @{
@@ -205,21 +206,21 @@ try
             "stdout" = "converger.stdout.log";
             "stderr" = "converger.stderr.log";
             "pid" = "converger.pid";
-            "args" = "-etcdCluster ${etcdCluster} -consulCluster=`"${consulCluster}`" -bbsAddress=`"${bbsAddress}`"";
+            "args" = "-etcdCluster ${etcdCluster} -consulCluster=`"${consulCluster}`"";
         };
         "consul" = @{
             "exe" = "consul.exe";
             "stdout" = "consul.stdout.log";
             "stderr" = "consul.stderr.log";
             "pid" = "consul.pid";
-            "args" = "agent -config-file ${consulJsonConfig} -data-dir ${consulDataDir} -join ${consulServerIp}";
+            "args" = "agent -bind ${gardenCellIP} -config-file ${consulJsonConfig} -data-dir ${consulDataDir} -join ${consulServerIp}";
         };
         "rep" = @{
             "exe" = "rep.exe";
             "stdout" = "rep.stdout.log";
             "stderr" = "rep.stderr.log";
             "pid" = "rep.pid";
-            "args" = "-etcdCluster ${etcdCluster} -bbsAddress=`"${bbsAddress}`" -consulCluster=`"${consulCluster}`" -cellID=${repCellID} -zone=${repZone} -rootFSProvider=${repRootFSProvider} -listenAddr=${repListenAddr} -gardenNetwork=${gardenListenNetwork} -gardenAddr=${gardenListenAddr} -memoryMB=${repMemoryMB} -diskMB=${repDiskMB} -containerMaxCpuShares=${repContainerMaxCpuShares}";
+            "args" = "-etcdCluster ${etcdCluster} -bbsAddress=`"${bbsAddress}`" -consulCluster=`"${consulCluster}`" -cellID=${repCellID} -zone=${repZone} -rootFSProvider=${repRootFSProvider} -listenAddr=${repListenAddr} -gardenNetwork=${gardenListenNetwork} -gardenAddr=${gardenListenAddr} -memoryMB=${repMemoryMB} -diskMB=${repDiskMB} -containerMaxCpuShares=${repContainerMaxCpuShares} -containerInodeLimit=${repContainerInodeLimit} -allowPrivileged -skipCertVerify -exportNetworkEnvVars";
         };
         "auctioneer" = @{
             "exe" = "auctioneer.exe";
