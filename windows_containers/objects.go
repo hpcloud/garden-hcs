@@ -13,7 +13,7 @@ type SharedBaseImages struct {
 
 // defaultContainerNAT is the default name of the container NAT device that is
 // preconfigured on the server.
-const defaultContainerNAT = "ContainerNAT"
+const DefaultContainerNAT = "ContainerNAT"
 
 // defaultOwner is a tag passed to HCS to allow it to differentiate between
 // container creator management stacks. We hard code "garden-windows" in the case
@@ -25,33 +25,33 @@ type Layer struct {
 	Path string
 }
 
-type defConfig struct {
+type DefConfig struct {
 	DefFile string
 }
 
-type portBinding struct {
+type PortBinding struct {
 	Protocol     string
 	InternalPort int
 	ExternalPort int
 }
 
-type natSettings struct {
+type NatSettings struct {
 	Name         string
-	PortBindings []portBinding
+	PortBindings []PortBinding
 }
 
-type networkConnection struct {
+type NetworkConnection struct {
 	NetworkName string
 	// TODO Windows: Add Ip4Address string to this structure when hooked up in
 	// docker CLI. This is present in the HCS JSON handler.
 	EnableNat bool
-	Nat       natSettings
+	Nat       NatSettings
 }
 type networkSettings struct {
 	MacAddress string
 }
 
-type device struct {
+type Device struct {
 	DeviceType string
 	Connection interface{}
 	Settings   interface{}
@@ -63,7 +63,7 @@ type ContainerInit struct {
 	Owner                   string   // The management platform that created this container
 	IsDummy                 bool     // Used for development purposes.
 	VolumePath              string   // Windows volume path for scratch space
-	Devices                 []device // Devices used by the container
+	Devices                 []Device // Devices used by the container
 	IgnoreFlushesDuringBoot bool     // Optimisation hint for container startup in Windows
 	LayerFolderPath         string   // Where the layer folders are located
 	Layers                  []Layer  // List of storage layers
