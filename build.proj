@@ -3,14 +3,14 @@
   <!--
   Available Targets:
 
-  /t:RestoreNugetPackages
-    Restores nuget packages
-  
-  /t:GatherPackages
-    Creates a bin directoy and copies all binaries in it
+  /t:AssembleDiego
+    Builds all required binaries and then copies them along with configuration files to "diego/bin".
+
+  /t:Installer
+    Creates the diego installer.
     
   /t:GetHacks
-    Installs go packages used whilst hacking on the code base and other dependencies (like msbuild community tasks)
+    Installs go packages used whilst hacking on the code base and other dependencies (like msbuild community tasks).
     
   -->
 
@@ -33,10 +33,15 @@
     <!-- Path to msbuild extensions - required by the package -->
     <MSBuildCommunityTasksPath>$(MSBuildTasksDirectory)\msbuildtasks.$(MSBuildPackageVersion)\tools\</MSBuildCommunityTasksPath>
 
-    <!-- Location of Diego Artifacts for Windows -->
-    <DiegoArtifactsDir>$(ProjectRoot)\diego\artifacts</DiegoArtifactsDir>
+    <!-- Location of Diego binaries for Windows -->
+    <DiegoBinDir>$(ProjectRoot)\diego\bin</DiegoBinDir>
     <ConsulDownloadURL>https://dl.bintray.com/mitchellh/consul/0.5.2_windows_386.zip</ConsulDownloadURL>
-    <ConsulZipFile>$(DiegoArtifactsDir)\consul.zip</ConsulZipFile>
+    <ConsulZipFile>$(DiegoBinDir)\consul.zip</ConsulZipFile>
+
+    <!-- Location of installer tools -->
+    <InstallerPackagerDir>$(ProjectRoot)\windows-tools\installer</InstallerPackagerDir>
+    <!-- Location installer package script -->
+    <InstallerPackagerScript>$(ProjectRoot)\windows-tools\installer\package.ps1</InstallerPackagerScript>
   </PropertyGroup>
 
   <!-- Imports -->
@@ -76,15 +81,20 @@
   
   <!-- Target for assembling diego dependencies -->
   <Target Name="AssembleDiego">
-    <RemoveDir Directories="$(DiegoArtifactsDir)" />
-    <MakeDir Directories="$(DiegoArtifactsDir)" />
+    <RemoveDir Directories="$(DiegoBinDir)" />
+    <MakeDir Directories="$(DiegoBinDir)" />
   </Target>
 
   <!-- Target for getting consul -->
   <Target Name="GetConsul" AfterTargets="AssembleDiego">
     <WebDownload FileUri="$(ConsulDownloadURL)" FileName="$(ConsulZipFile)"/>
-    <Unzip TargetDirectory="$(DiegoArtifactsDir)" ZipFileName="$(ConsulZipFile)"/>
+    <Unzip TargetDirectory="$(DiegoBinDir)" ZipFileName="$(ConsulZipFile)"/>
     <Delete Files="$(ConsulZipFile)" />
+  </Target>
+
+  <Target Name="Installer" DependsOnTargets="AssembleDiego">
+    <Message Importance="high" Text="Building the installer ..." />
+    <Exec WorkingDirectory="$(InstallerPackagerDir)" Command="powershell.exe -ExecutionPolicy Bypass -NoLogo -File $(InstallerPackagerScript) -Action package -BinDir $(DiegoBinDir)" />
   </Target>
 
   <!-- List of GO projects that are part of a Windows Diego Cell -->
@@ -110,28 +120,28 @@
   <Target Name="BuildDiegoComponents" Outputs="%(DiegoProj.Artifact)" AfterTargets="AssembleDiego">
     <Message Importance="high" Text="Building %(DiegoProj.Artifact) ..." />
     <Exec WorkingDirectory="%(DiegoProj.Identity)" Command="go build" />
-    <Copy SourceFiles="%(DiegoProj.Identity)\%(DiegoProj.Artifact)" DestinationFolder="$(DiegoArtifactsDir)" />
+    <Copy SourceFiles="%(DiegoProj.Identity)\%(DiegoProj.Artifact)" DestinationFolder="$(DiegoBinDir)" />
   </Target>
 
   <!-- List of scripts and configuration files that need to be a part of a Diego cell -->
   <ItemGroup>
-    <DiegoFile Include="$(ProjectRoot)\lattice\diego-dev-ctl.ps1">
-      <ArtifactDestinationDir>$(DiegoArtifactsDir)</ArtifactDestinationDir>
+    <DiegoFile Include="$(ProjectRoot)\diego\diego-ctl.ps1">
+      <BinDestinationDir>$(DiegoBinDir)</BinDestinationDir>
     </DiegoFile>
     
-    <DiegoFile Include="$(ProjectRoot)\lattice\config\consul.json">
-      <ArtifactDestinationDir>$(DiegoArtifactsDir)\config</ArtifactDestinationDir>
+    <DiegoFile Include="$(ProjectRoot)\diego\config\consul.json">
+      <BinDestinationDir>$(DiegoBinDir)\config</BinDestinationDir>
     </DiegoFile>
     
-    <DiegoFile Include="$(ProjectRoot)\lattice\config\windows-lattice.json">
-      <ArtifactDestinationDir>$(DiegoArtifactsDir)\config</ArtifactDestinationDir>
+    <DiegoFile Include="$(ProjectRoot)\diego\config\windows-diego.json">
+      <BinDestinationDir>$(DiegoBinDir)\config</BinDestinationDir>
     </DiegoFile>
   </ItemGroup>
 
   <!-- Target for copying scripts and configuration files for a Diego cell -->
   <Target Name="CopyDiegoScriptsAndConfigs" Outputs="%(DiegoProj.Identity)" AfterTargets="AssembleDiego">
     <Message Importance="high" Text="Copying %(DiegoFile.Identity) ..." />
-    <MakeDir Directories="%(DiegoFile.ArtifactDestinationDir)" />
-    <Copy SourceFiles="%(DiegoFile.Identity)" DestinationFolder="%(DiegoFile.ArtifactDestinationDir)" />
+    <MakeDir Directories="%(DiegoFile.BinDestinationDir)" />
+    <Copy SourceFiles="%(DiegoFile.Identity)" DestinationFolder="%(DiegoFile.BinDestinationDir)" />
   </Target>
 </Project>
