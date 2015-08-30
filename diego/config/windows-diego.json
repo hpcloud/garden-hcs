@@ -6,6 +6,7 @@
   "gardenLogLevel": "info",
   "gardenCellIP": "10.0.1.6",
   "consulServerIp": "10.0.1.2",
+  "consulRecursors": "8.8.8.8,8.8.4.4",
   "repCellID": "windows-cell-0",
   "repZone": "z1",
   "repMemoryMB": "auto",
