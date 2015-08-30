@@ -1,10 +1,10 @@
 param(
     [Parameter(Mandatory=$true, Position=1)]
-    [ValidateSet('start', 'stop', 'status', 'watch-status', 'register-prison', 'unregister-prison')]
+    [ValidateSet('start', 'run', 'stop', 'status', 'watch-status')]
     [string]$Action,
 
     [Parameter(Mandatory=$false, Position=2)]
-    [ValidateSet("all", "converger", "consul", "rep", "auctioneer" , "garden")]
+    [ValidateSet("all", "converger", "consul", "rep", "auctioneer" , "garden-windows")]
     [string]$Component = 'all',
     
     [Parameter(Mandatory=$false)]
@@ -56,6 +56,14 @@ function Start-Daemon{[CmdletBinding()]param($daemon)
     {
         Write-Output "${daemon} is already running"
     }
+}
+
+function Run-Daemon{[CmdletBinding()]param($daemon)
+    Write-Host "Running ${daemon} ..."
+    $exe = Join-Path $binDir $processes[$daemon]['exe']
+    $args = $processes[$daemon]['args']
+
+    $daemonProcess = Start-Process -PassThru -NoNewWindow -Wait $exe "${args}"
 }
 
 function Stop-Daemon{[CmdletBinding()]param($daemon)
@@ -131,9 +139,9 @@ function Check-Paths{[CmdletBinding()]param($daemon)
         throw "Consul json config '${consulJsonConfig}' not found."
     }
 
-    if (!(Test-Path $latticeJsonConfig))
+    if (!(Test-Path $diegoJsonConfig))
     {
-        throw "Lattice json config '${latticeJsonConfig}' not found."
+        throw "Diego json config '${diegoJsonConfig}' not found."
     }
 
     mkdir $pidDir -ErrorAction 'SilentlyContinue' | out-null
@@ -149,22 +157,22 @@ try
     }
     else
     {
-        $devDiegoArtifactsDir = [System.IO.Path]::GetFullPath((Join-Path $currentDir "..\diego\artifacts\"))
+        $devDiegoBinDir = [System.IO.Path]::GetFullPath((Join-Path $currentDir ".\bin"))
 
         # See if there are binaries (just check for garden-windows) in the current directory
-        # If there aren't, look in ..\diego\artifacts\
+        # If there aren't, look in .\bin\
         # Error otherwise
         if (Test-Path (Join-Path $currentDir "garden-windows.exe"))
         {
             $binDir = $currentDir
         }
-        elseif (Test-Path (Join-Path $devDiegoArtifactsDir "garden-windows.exe"))
+        elseif (Test-Path (Join-Path $devDiegoBinDir "garden-windows.exe"))
         {
-            $binDir = $devDiegoArtifactsDir
+            $binDir = $devDiegoBinDir
         }
         else
         {
-            throw "Can't find diego binaries. Looked in '${currentDir}' and '${devDiegoArtifactsDir}'."
+            throw "Can't find diego binaries. Looked in '${currentDir}' and '${devDiegoBinDir}'."
         }
     }
 
@@ -172,33 +180,34 @@ try
     $pidDir = Join-Path $currentDir 'pids'
     $logDir = Join-Path $currentDir 'logs'
 
-    $latticeJsonConfig = Join-Path $configDir 'windows-lattice.json'
+    $diegoJsonConfig = Join-Path $configDir 'windows-diego.json'
     $consulJsonConfig = Join-Path $configDir 'consul.json'
     $consulDataDir = Join-Path $binDir 'consul_data'
 
     Check-Paths
 
-    $latticeConfig = Get-Content -Raw $latticeJsonConfig | ConvertFrom-Json
+    $diegoConfig = Get-Content -Raw $diegoJsonConfig | ConvertFrom-Json
 
-    $etcdCluster = $latticeConfig.etcdCluster
-    $consulCluster = $latticeConfig.consulCluster
+    $etcdCluster = $diegoConfig.etcdCluster
+    $consulCluster = $diegoConfig.consulCluster
+	$consulRecursors = ($diegoConfig.consulRecursors.Split(",", [StringSplitOptions]::RemoveEmptyEntries) | % { "-recursor `"$($_)`"" }) -join " "
 
-    $gardenListenNetwork = $latticeConfig.gardenListenNetwork
-    $gardenListenAddr = $latticeConfig.gardenListenAddr
-    $gardenLogLevel = $latticeConfig.gardenLogLevel
-    $gardenCellIP = $latticeConfig.gardenCellIP
+    $gardenListenNetwork = $diegoConfig.gardenListenNetwork
+    $gardenListenAddr = $diegoConfig.gardenListenAddr
+    $gardenLogLevel = $diegoConfig.gardenLogLevel
+    $gardenCellIP = $diegoConfig.gardenCellIP
 
-    $consulServerIp = $latticeConfig.consulServerIp
+    $consulServerIp = $diegoConfig.consulServerIp
 
-    $repCellID = $latticeConfig.repCellID
-    $repZone = $latticeConfig.repZone
-    $repMemoryMB = $latticeConfig.repMemoryMB
-    $repDiskMB = $latticeConfig.repDiskMB
-    $repListenAddr = $latticeConfig.repListenAddr
-    $repRootFSProvider = $latticeConfig.repRootFSProvider
-    $repContainerMaxCpuShares = $latticeConfig.repContainerMaxCpuShares
-    $repContainerInodeLimit = $latticeConfig.repContainerInodeLimit
-    $bbsAddress = $latticeConfig.bbsAddress
+    $repCellID = $diegoConfig.repCellID
+    $repZone = $diegoConfig.repZone
+    $repMemoryMB = $diegoConfig.repMemoryMB
+    $repDiskMB = $diegoConfig.repDiskMB
+    $repListenAddr = $diegoConfig.repListenAddr
+    $repRootFSProvider = $diegoConfig.repRootFSProvider
+    $repContainerMaxCpuShares = $diegoConfig.repContainerMaxCpuShares
+    $repContainerInodeLimit = $diegoConfig.repContainerInodeLimit
+    $bbsAddress = $diegoConfig.bbsAddress
 
     $processes = @{
         "converger" = @{
@@ -213,7 +222,7 @@ try
             "stdout" = "consul.stdout.log";
             "stderr" = "consul.stderr.log";
             "pid" = "consul.pid";
-            "args" = "agent -bind ${gardenCellIP} -config-file ${consulJsonConfig} -data-dir ${consulDataDir} -join ${consulServerIp}";
+            "args" = "agent -bind ${gardenCellIP} -config-file ${consulJsonConfig} -data-dir ${consulDataDir} -join ${consulServerIp} ${consulRecursors}";
         };
         "rep" = @{
             "exe" = "rep.exe";
@@ -229,7 +238,7 @@ try
             "pid" = "auctioneer.pid";
             "args" = "-etcdCluster ${etcdCluster} -consulCluster=`"${consulCluster}`" -bbsAddress=`"${bbsAddress}`"";
         };
-        "garden" = @{
+        "garden-windows" = @{
             "exe" = "garden-windows.exe";
             "stdout" = "garden-windows.stdout.log";
             "stderr" = "garden-windows.stderr.log";
@@ -240,6 +249,11 @@ try
 
     if ($Component -eq 'all')
     {
+        if ($Action -eq 'run')
+        {
+            throw "Cannot 'run' more than one process at a time. Either use 'start' or specify a single service."
+        }
+        
         $processesToAct = $processes.Keys
     }
     else
@@ -260,6 +274,9 @@ try
             {
                 Start-Daemon $daemon
             }
+        }
+        "run" {
+            Run-Daemon $processesToAct[0]
         }
         "stop" {
             foreach ($daemon in $processesToAct)
