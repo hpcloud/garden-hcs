@@ -373,6 +373,10 @@ function InstallDiego($destfolder, $configuration)
     if (!(Get-NetFirewallRule | where {$_.Name -eq "TCP8080"})) {
        New-NetFirewallRule -Name "TCP8080" -DisplayName "HTTP on TCP/8080" -Protocol tcp -LocalPort 8080 -Action Allow -Enabled True
     }
+	
+	if (!(Get-NetFirewallRule | where {$_.Name -eq "TCP1700"})) {
+       New-NetFirewallRule -Name "TCP1700" -DisplayName "HTTP on TCP/1700" -Protocol tcp -LocalPort 1700 -Action Allow -Enabled True
+    }
     
     # Start consul
     Start-Service -Name "consul"
