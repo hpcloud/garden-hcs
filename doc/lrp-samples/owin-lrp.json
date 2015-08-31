@@ -6,7 +6,8 @@
           "download": {
             "from": "https:\/\/region-b.geo-1.objects.hpcloudsvc.com\/v1\/10990308817909\/pelerinul\/selfhostedapi.zip",
             "to": ".\/",
-            "cache_key": ""
+            "cache_key": "",
+            "user": "dummy"
           }
         }
       ]
@@ -14,15 +15,17 @@
   },
   "action": {
     "run": {
-      "path": "SelfHostedWebAPI.exe",
+      "path": "c:\\SelfHostedWebAPI.exe",
       "args": [
       ],
       "env": [
+        { "PORT": "8080" }
       ],
       "resource_limits": {
-        
+
       },
-      "log_source": "APP"
+      "log_source": "APP",
+      "user": "dummy"
     }
   },
   "monitor": {
@@ -31,28 +34,23 @@
         "run": {
           "path": "C:\\Windows\\System32\\cmd.exe",
           "args": [
-            "/c echo ok"
+            "/c exit 0"
           ],
           "env": null,
           "resource_limits": {
-            
+
           },
-          "log_source": "HEALTH"
+          "log_source": "HEALTH",
+          "user": "dummy"
         }
       },
       "timeout": 30000000000
     }
   },
   "process_guid": "owin",
-  "domain": "192.168.11.11.xip.io",
-  "rootfs": "win:test",
+  "domain": "lattice",
+  "rootfs": "windowsservercore:test",
   "instances": 1,
-  "env": [
-    {
-      "name": "PROCESS_GUID",
-      "value": "owin"
-    }
-  ],
   "start_timeout": 60,
   "disk_mb": 0,
   "memory_mb": 128,
@@ -65,13 +63,13 @@
     "cf-router": [
       {
         "hostnames": [
-          "owin"
+          "owin.<YOUR PUBLIC IP>.xip.io"
         ],
         "port": 8080
       }
     ]
   },
   "log_source": "APP",
-  "log_guid": "owin",
-  "metrics_guid": "owin"
+  "log_guid": "winapp",
+  "metrics_guid": "winapp"
 }
