@@ -7,8 +7,11 @@
     Builds all required binaries and then copies them along with configuration files to "diego/bin".
 
   /t:Installer
-    Creates the diego installer.
+    Creates the diego installer. Builds everything first.
     
+  /t:Tests
+    Runs tests and gathers code coverage. Does not build prior to testing.
+ 	
   /t:GetHacks
     Installs go packages used whilst hacking on the code base and other dependencies (like msbuild community tasks).
     
@@ -68,6 +71,8 @@
 	  <Packages Include="github.com/Microsoft/hcsshim" />
 	  <Packages Include="code.google.com/p/go-uuid/uuid" />
 	  <Packages Include="github.com/stretchr/testify/assert" />
+	  <Packages Include="github.com/axw/gocov/..." />
+      <Packages Include="github.com/AlekSi/gocov-xml" />
     </ItemGroup>
 
     <Exec Command="go get %(Packages.identity)"/>
@@ -143,5 +148,11 @@
     <Message Importance="high" Text="Copying %(DiegoFile.Identity) ..." />
     <MakeDir Directories="%(DiegoFile.BinDestinationDir)" />
     <Copy SourceFiles="%(DiegoFile.Identity)" DestinationFolder="%(DiegoFile.BinDestinationDir)" />
+  </Target>
+
+  <!-- Target for running tests -->
+  <Target Name="Test">
+    <Message Importance="high" Text="Running tests ..." />
+    <Exec Command="gocov test .\... | gocov-xml > coverage.xml" />
   </Target>
 </Project>
