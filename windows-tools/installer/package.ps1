@@ -95,6 +95,10 @@ function DoAction-Install()
     $ipAddress = $ipConfiguration.IPv4Address.IPAddress
     $dnsAddresses = (($ipConfiguration.DNSServer | where {$_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork}).ServerAddresses | where {$_ -ne '127.0.0.1'}) -Join ","
 
+	if ([string]::IsNullOrWhiteSpace($env:DIEGO_USER_PASSWORD))
+    {
+        $env:DIEGO_USER_PASSWORD = "changeme1234!"
+    }
 
     if ([string]::IsNullOrWhiteSpace($env:GARDEN_CELL_IP))
     {
@@ -250,6 +254,39 @@ function DoAction-Install()
     InstallDiego $destfolder $configuration $configFolder $logsFolder
 }
 
+# This function creates the 'diego' user, if it doesn't already exist
+function Create-DiegoUser()
+{
+	$Computer = [ADSI]"WinNT://$Env:COMPUTERNAME,Computer"
+	$colUsers = ($Computer.psbase.children | Where-Object {$_.psBase.schemaClassName -eq "User"} | Select-Object -expand Name)
+
+	if ($colUsers -contains 'diego')
+	{
+        Write-Output "User 'diego' exists"
+
+	}
+	else
+	{
+		Write-Output "Creating user 'diego'"
+		$computername = $env:computername   # place computername here for remote access
+		$username = 'diego'
+		$password = $env:DIEGO_USER_PASSWORD
+		$desc = 'Automatically created local admin account'
+
+		$computer = [ADSI]"WinNT://$computername,computer"
+		$user = $computer.Create("user", $username)
+		$user.SetPassword($password)
+		$user.Setinfo()
+		$user.description = $desc
+		$user.setinfo()
+		$user.UserFlags = 65536
+		$user.SetInfo()
+		$group = [ADSI]("WinNT://$computername/administrators,group")
+		$group.add("WinNT://$username,user")
+	}
+}
+
+
 # This function calls the nssm.exe binary to set a property
 function SetNSSMParameter($serviceName, $parameterName, $parameterValue)
 {
@@ -289,6 +326,7 @@ function InstallNSSMService($serviceName, $executable)
 function SetupNSSMService($serviceName, $serviceDisplayName, $serviceDescription, $startupDirectory, $executable, $arguments, $stdoutLog, $stderrLog)
 {
     InstallNSSMService $serviceName $executable
+	SetNSSMParameter $serviceName "ObjectName" ".\diego $($env:DIEGO_USER_PASSWORD)"
     SetNSSMParameter $serviceName "DisplayName" $serviceDisplayName
     SetNSSMParameter $serviceName "Description" $serviceDescription
     SetNSSMParameter $serviceName "AppDirectory" $startupDirectory
@@ -301,6 +339,8 @@ function SetupNSSMService($serviceName, $serviceDisplayName, $serviceDescription
 # This function does all the installation. Writes the config, installs services, sets up firewall 
 function InstallDiego($destfolder, $configuration)
 {
+    Create-DiegoUser
+
     Write-Output "Writing JSON configuration ..."
     $configFile = Join-Path $destFolder "config\windows-diego.json"
     $configuration | ConvertTo-Json | Out-File -Encoding ascii -FilePath $configFile
