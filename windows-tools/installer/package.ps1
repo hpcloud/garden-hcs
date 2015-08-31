@@ -67,11 +67,11 @@ function DoAction-Package($binDir)
 function DoAction-Install()
 {
 	Write-Output 'Stopping any existing Diego Services'
-	Stop-Service -Name "consul"
-    Stop-Service -Name "converger"
-    Stop-Service -Name "rep"
-    Stop-Service -Name "auctioneer"
-    Stop-Service -Name "garden-windows"
+	Stop-Service -Name "consul" -ErrorAction SilentlyContinue | Out-Null
+    Stop-Service -Name "converger" -ErrorAction SilentlyContinue | Out-Null
+    Stop-Service -Name "rep" -ErrorAction SilentlyContinue | Out-Null
+    Stop-Service -Name "auctioneer" -ErrorAction SilentlyContinue | Out-Null
+    Stop-Service -Name "garden-windows" -ErrorAction SilentlyContinue | Out-Null
 
     Write-Output 'Installing Diego services ...'
     
