@@ -66,6 +66,13 @@ function DoAction-Package($binDir)
 # Entry point of the script when the action is "install"
 function DoAction-Install()
 {
+	Write-Output 'Stopping any existing Diego Services'
+	Stop-Service -Name "consul"
+    Stop-Service -Name "converger"
+    Stop-Service -Name "rep"
+    Stop-Service -Name "auctioneer"
+    Stop-Service -Name "garden-windows"
+
     Write-Output 'Installing Diego services ...'
     
     if ([string]::IsNullOrWhiteSpace($env:CONSUL_SERVER_IP -eq $null))
@@ -96,7 +103,7 @@ function DoAction-Install()
     
     if ([string]::IsNullOrWhiteSpace($env:ETCD_CLUSTER))
     {
-        $env:ETCD_CLUSTER = "etcd.service.dc1.consul"
+        $env:ETCD_CLUSTER = "http://etcd.service.dc1.consul:4001"
     }
 
     if ([string]::IsNullOrWhiteSpace($env:CONSUL_RECURSORS))
