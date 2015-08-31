@@ -93,7 +93,7 @@ function DoAction-Install()
     }
     $ipConfiguration = Get-NetIPConfiguration -InterfaceAlias $env:DIEGO_NETADAPTER
     $ipAddress = $ipConfiguration.IPv4Address.IPAddress
-    $dnsAddresses = ($ipConfiguration.DNSServer | where {$_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork}).ServerAddresses -Join ","
+    $dnsAddresses = (($ipConfiguration.DNSServer | where {$_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork}).ServerAddresses | where {$_ -ne '127.0.0.1'}) -Join ","
 
 
     if ([string]::IsNullOrWhiteSpace($env:GARDEN_CELL_IP))
@@ -378,6 +378,9 @@ function InstallDiego($destfolder, $configuration)
     Start-Service -Name "consul"
 
     # Set windows DNS server
+	$dnsServers = @("127.0.0.1") + $env:CONSUL_RECURSORS.split(",")
+	Write-Output "Setting up $($dnsServers.Length) DNS servers: $($dnsServers -Join ',')"
+	Set-DnsClientServerAddress -InterfaceAlias $env:DIEGO_NETADAPTER -ServerAddresses $dnsServers
 
     # Start all other services
     Start-Service -Name "consul"
