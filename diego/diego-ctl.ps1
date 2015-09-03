@@ -59,7 +59,6 @@ function Start-Daemon{[CmdletBinding()]param($daemon)
 }
 
 function Run-Daemon{[CmdletBinding()]param($daemon)
-    Write-Host "Running ${daemon} ..."
     $exe = Join-Path $binDir $processes[$daemon]['exe']
     $args = $processes[$daemon]['args']
 
