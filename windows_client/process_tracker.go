@@ -1,21 +1,27 @@
 package prison_client
 
 import (
+	"fmt"
+
 	"github.com/Microsoft/hcsshim"
 	"github.com/cloudfoundry-incubator/garden"
+	"github.com/pivotal-golang/lager"
 )
 
 type ProcessTracker struct {
 	pid         uint32
 	containerId string
 	driverInfo  hcsshim.DriverInfo
+
+	logger lager.Logger
 }
 
-func NewProcessTracker(containerId string, pid uint32, driverInfo hcsshim.DriverInfo) *ProcessTracker {
+func NewProcessTracker(containerId string, pid uint32, driverInfo hcsshim.DriverInfo, logger lager.Logger) *ProcessTracker {
 	ret := &ProcessTracker{
 		containerId: containerId,
 		pid:         pid,
 		driverInfo:  driverInfo,
+		logger:      logger,
 	}
 
 	return ret
@@ -45,10 +51,18 @@ func (t *ProcessTracker) SetTTY(garden.TTYSpec) error {
 }
 
 func (process ProcessTracker) Signal(signal garden.Signal) error {
+
 	err := hcsshim.TerminateProcessInComputeSystem(
 		process.containerId,
 		process.pid,
 	)
 
-	return err
+	if err != nil {
+		process.logger.Info(fmt.Sprintf("Warning - failed to terminate pid %d in %s", process.pid, process.containerId, err))
+	}
+
+	// Ignoring errors based on
+	// https://github.com/docker/docker/blob/master/daemon/execdriver/windows/terminatekill.go#L30
+
+	return nil
 }
