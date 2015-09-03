@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudfoundry-incubator/garden-windows/windows_containers"
-	"github.com/pivotal-golang/lager"
 )
 
 func TestMain(m *testing.M) {
