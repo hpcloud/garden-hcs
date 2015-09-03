@@ -4,7 +4,7 @@
       "actions": [
         {
           "download": {
-            "from": "https:\/\/region-b.geo-1.objects.hpcloudsvc.com\/v1\/10990308817909\/pelerinul\/env-server.zip",
+            "from": "https:\/\/region-b.geo-1.objects.hpcloudsvc.com\/v1\/10990308817909\/pelerinul\/lattice-app.zip",
             "to": ".\/",
             "cache_key": "",
 	    "user": "dummy"
@@ -15,10 +15,8 @@
   },
   "action": {
     "run": {
-      "path": "powershell.exe",
-      "args": [
-        "-executionpolicy bypass",
-        "-file c:\\env-server.ps1"
+      "path": "c:\\lattice-app.exe",
+      "args": [       
       ],
       "env": [
         { "PORT": "8080" }
@@ -49,7 +47,7 @@
       "timeout": 30000000000
     }
   },
-  "process_guid": "env",
+  "process_guid": "ltcwin",
   "domain": "lattice",
   "rootfs": "windowsservercore:test",
   "instances": 1,
@@ -65,13 +63,13 @@
     "cf-router": [
       {
         "hostnames": [
-          "env.<YOUR PUBLIC IP>.xip.io"
+          "ltcwin.<YOUR PUBLIC IP>.xip.io"
         ],
         "port": 8080
       }
     ]
   },
   "log_source": "APP",
-  "log_guid": "env",
-  "metrics_guid": "env"
+  "log_guid": "ltcwin",
+  "metrics_guid": "ltcwin"
 }
