@@ -6,4 +6,6 @@ garden-windows.exe
 /lattice/consul_data
 /lattice/logs
 /lattice/pids
-
+coverage.xml
+/diego/bin
+diego-installer.exe
