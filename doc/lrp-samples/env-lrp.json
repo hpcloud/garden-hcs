@@ -1,0 +1,77 @@
+{
+  "setup": {
+    "serial": {
+      "actions": [
+        {
+          "download": {
+            "from": "https:\/\/region-b.geo-1.objects.hpcloudsvc.com\/v1\/10990308817909\/pelerinul\/env-server.zip",
+            "to": ".\/",
+            "cache_key": "",
+	    "user": "dummy"
+          }
+        }
+      ]
+    }
+  },
+  "action": {
+    "run": {
+      "path": "powershell.exe",
+      "args": [
+        "-executionpolicy bypass",
+        "-file c:\\env-server.ps1"
+      ],
+      "env": [
+        { "PORT": "8080" }
+      ],
+      "resource_limits": {
+        
+      },
+      "log_source": "APP",
+      "user": "dummy"
+    }
+  },
+  "monitor": {
+    "timeout": {
+      "action": {
+        "run": {
+          "path": "C:\\Windows\\System32\\cmd.exe",
+          "args": [
+            "/c exit 0"
+          ],
+          "env": null,
+          "resource_limits": {
+            
+          },
+          "log_source": "HEALTH",
+	  "user": "dummy"
+        }
+      },
+      "timeout": 30000000000
+    }
+  },
+  "process_guid": "env",
+  "domain": "lattice",
+  "rootfs": "windowsservercore:test",
+  "instances": 1,
+  "start_timeout": 60,
+  "disk_mb": 0,
+  "memory_mb": 128,
+  "cpu_weight": 0,
+  "privileged": true,
+  "ports": [
+    8080
+  ],
+  "routes": {
+    "cf-router": [
+      {
+        "hostnames": [
+          "env.15.126.210.47.xip.io"
+        ],
+        "port": 8080
+      }
+    ]
+  },
+  "log_source": "APP",
+  "log_guid": "env",
+  "metrics_guid": "env"
+}
