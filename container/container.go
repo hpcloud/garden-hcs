@@ -79,6 +79,9 @@ func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger 
 		virtualSwitch: virtualSwitch,
 	}
 
+	result.runMutex.Lock()
+	defer result.runMutex.Unlock()
+
 	// The rootfs we need to use is the scheme from the
 	result.RootFSPath = containerSpec.RootFSPath
 	result.WindowsContainerSpec.Properties = containerSpec.Properties
@@ -220,6 +223,9 @@ func (container *container) Info() (garden.ContainerInfo, error) {
 // *  TODO.
 func (container *container) StreamIn(spec garden.StreamInSpec) error {
 	container.logger.Debug("WC: StreamIn")
+
+	container.runMutex.Lock()
+	defer container.runMutex.Unlock()
 
 	// Get container directory
 	layerFolder := container.dir(container.id)
@@ -425,7 +431,7 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 	}()
 
 	// Create a new process tracker for the process we've just created
-	pt := prison_client.NewProcessTracker(container.id, pid, container.driverInfo)
+	pt := prison_client.NewProcessTracker(container.id, pid, container.driverInfo, container.logger)
 
 	container.logger.Debug("Container run created new process.", lager.Data{
 		"PID": pt.ID(),
@@ -523,12 +529,6 @@ func (container *container) RemoveProperty(name string) error {
 	}
 
 	delete(container.WindowsContainerSpec.Properties, name)
-
-	return nil
-}
-
-func (container *container) destroy() error {
-	container.logger.Debug("WC: Destroy")
 
 	return nil
 }
