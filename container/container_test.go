@@ -78,7 +78,7 @@ func TestRunInContainer(t *testing.T) {
 
 	processSpec := garden.ProcessSpec{
 		Path: "cmd.exe",
-		Args: []string{"/v", "ver"},
+		Args: []string{"/c", "ver"},
 		Env:  []string{},
 		Dir:  "c:\\",
 	}
@@ -124,7 +124,7 @@ func TestRunInContainerWithOutput(t *testing.T) {
 
 	processSpec := garden.ProcessSpec{
 		Path: "cmd.exe",
-		Args: []string{"/v", "ver"},
+		Args: []string{"/c", "ver"},
 		Env:  []string{},
 		Dir:  "c:\\",
 	}
@@ -147,6 +147,58 @@ func TestRunInContainerWithOutput(t *testing.T) {
 
 	output := stdout.String()
 	assert.Contains(output, "Windows")
+}
+
+func TestRunInContainerEnv(t *testing.T) {
+	assert := assert.New(t)
+
+	logger, _ := cf_lager.New("windows-garden-tests")
+
+	id := uuid.New()
+	handle := id
+	rootPath := "WindowsServerCore:dummy"
+	hostIP := "127.0.0.1"
+	virtualSwitch := "Virtual Switch"
+	driverInfo := windows_containers.NewDriverInfo("c:\\garden-windows\\tests")
+	properties := garden.Properties{}
+
+	containerSpec := garden.ContainerSpec{
+		Handle:     handle,
+		Properties: properties,
+		RootFSPath: rootPath,
+		Env:        []string{"INSTANCE_INDEX=0"},
+	}
+
+	container, err := NewContainer(id, handle, containerSpec, logger, hostIP, driverInfo, virtualSwitch)
+	defer container.Stop(true)
+
+	assert.Nil(err)
+
+	processSpec := garden.ProcessSpec{
+		Path: "cmd.exe",
+		Args: []string{"/c", "set"},
+		Env:  []string{},
+		Dir:  "c:\\",
+	}
+
+	stdout := bytes.NewBufferString("")
+
+	pio := garden.ProcessIO{
+		Stdin:  nil,
+		Stdout: stdout,
+		Stderr: nil,
+	}
+
+	pt, err := container.Run(processSpec, pio)
+	assert.Nil(err)
+
+	exitCode, err := pt.Wait()
+
+	assert.Nil(err)
+	assert.Equal(0, exitCode)
+
+	output := stdout.String()
+	assert.Contains(output, "INSTANCE_INDEX")
 }
 
 func TestRunInContainerWithNetwork(t *testing.T) {

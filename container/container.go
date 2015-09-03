@@ -82,6 +82,8 @@ func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger 
 	result.runMutex.Lock()
 	defer result.runMutex.Unlock()
 
+	result.Env = containerSpec.Env
+
 	// The rootfs we need to use is the scheme from the
 	result.RootFSPath = containerSpec.RootFSPath
 	result.WindowsContainerSpec.Properties = containerSpec.Properties
@@ -381,9 +383,16 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 	// Create an env var map
 	envs := map[string]string{}
 	for _, env := range spec.Env {
-		spltiEnv := strings.SplitN(env, "=", 2)
-		envs[spltiEnv[0]] = spltiEnv[1]
+		splitEnv := strings.SplitN(env, "=", 2)
+		envs[splitEnv[0]] = splitEnv[1]
 	}
+	// Also add container's env vars
+	for _, env := range container.Env {
+		splitEnv := strings.SplitN(env, "=", 2)
+		envs[splitEnv[0]] = splitEnv[1]
+	}
+
+	container.logger.Info("Envs", lager.Data{"Env": envs})
 
 	// TODO: Investigate what exactly EmulateConsole does,
 	// as well as console size
