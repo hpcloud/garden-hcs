@@ -1,6 +1,7 @@
 package container
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -53,6 +55,7 @@ type container struct {
 
 	hostPort      int
 	containerPort int
+	containerIp   string
 
 	runMutex        sync.Mutex
 	propertiesMutex sync.RWMutex
@@ -78,9 +81,6 @@ func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger 
 		active:        0,
 		virtualSwitch: virtualSwitch,
 	}
-
-	result.runMutex.Lock()
-	defer result.runMutex.Unlock()
 
 	result.Env = containerSpec.Env
 
@@ -136,6 +136,12 @@ func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger 
 
 	// Start the container
 	err = hcsshim.StartComputeSystem(id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get the container's IP address
+	result.containerIp, err = result.getContainerIp()
 	if err != nil {
 		return nil, err
 	}
@@ -196,8 +202,8 @@ func (container *container) Info() (garden.ContainerInfo, error) {
 		State:       "active",
 		ExternalIP:  container.hostIP,
 		HostIP:      container.hostIP,
-		ContainerIP: container.hostIP,
-		Events:      []string{"party"},
+		ContainerIP: container.containerIp,
+		Events:      []string{},
 		ProcessIDs:  []uint32{},
 		Properties:  properties,
 		MappedPorts: []garden.PortMapping{
@@ -207,14 +213,6 @@ func (container *container) Info() (garden.ContainerInfo, error) {
 			},
 		},
 	}
-
-	container.logger.Info("Info called", lager.Data{
-		"State":         result.State,
-		"HostIP":        result.HostIP,
-		"ContainerIP":   result.ContainerIP,
-		"HostPort":      result.MappedPorts[0].HostPort,
-		"ContainerPort": result.MappedPorts[0].ContainerPort,
-	})
 
 	return result, nil
 }
@@ -258,7 +256,7 @@ func (container *container) StreamIn(spec garden.StreamInSpec) error {
 // Errors:
 // * TODO.
 func (container *container) StreamOut(spec garden.StreamOutSpec) (io.ReadCloser, error) {
-	container.logger.Debug("WC: StreamOut")
+	container.logger.Debug("TODO: StreamOut")
 
 	// TODO: investigate a proper implementation
 	// It is unclear if it's ok to keep the container mounted until the reader
@@ -269,25 +267,23 @@ func (container *container) StreamOut(spec garden.StreamOutSpec) (io.ReadCloser,
 
 // Limits the network bandwidth for a container.
 func (container *container) LimitBandwidth(limits garden.BandwidthLimits) error {
-	container.logger.Debug("WC: LimitBandwidth")
-
-	container.logger.Info("TODO LimitBandwidth")
+	container.logger.Debug("TODO: LimitBandwidth")
 	return nil
 }
 
 func (container *container) CurrentBandwidthLimits() (garden.BandwidthLimits, error) {
-	container.logger.Info("TODO CurrentBandwidthLimits")
+	container.logger.Debug("WC: CurrentBandwidthLimits")
 	return garden.BandwidthLimits{}, nil
 }
 
 // Limits the CPU shares for a container.
 func (container *container) LimitCPU(limits garden.CPULimits) error {
-	container.logger.Info("TODO LimitCPU")
+	container.logger.Debug("TODO: LimitCPU")
 	return nil
 }
 
 func (container *container) CurrentCPULimits() (garden.CPULimits, error) {
-	container.logger.Info("TODO CurrentCPULimits")
+	container.logger.Debug("WC: CurrentCPULimits")
 	return garden.CPULimits{}, nil
 }
 
@@ -298,12 +294,12 @@ func (container *container) CurrentCPULimits() (garden.CPULimits, error) {
 //
 // TODO: explain how disk management works.
 func (container *container) LimitDisk(limits garden.DiskLimits) error {
-	container.logger.Info("TODO LimitDisk")
+	container.logger.Debug("TODO: LimitDisk")
 	return nil
 }
 
 func (container *container) CurrentDiskLimits() (garden.DiskLimits, error) {
-	container.logger.Info("TODO CurrentDiskLimits")
+	container.logger.Debug("WC: CurrentDiskLimits")
 	return garden.DiskLimits{}, nil
 }
 
@@ -315,12 +311,12 @@ func (container *container) CurrentDiskLimits() (garden.DiskLimits, error) {
 // Errors:
 // * The kernel does not support setting memory.memsw.limit_in_bytes.
 func (container *container) LimitMemory(limits garden.MemoryLimits) error {
-	container.logger.Info("TODO LimitMemory")
+	container.logger.Debug("TODO: LimitMemory")
 	return nil
 }
 
 func (container *container) CurrentMemoryLimits() (garden.MemoryLimits, error) {
-	container.logger.Info("TODO CurrentMemoryLimits")
+	container.logger.Debug("WC: CurrentMemoryLimits")
 	return garden.MemoryLimits{}, nil
 }
 
@@ -338,7 +334,7 @@ func (container *container) CurrentMemoryLimits() (garden.MemoryLimits, error) {
 // Errors:
 // * When no port can be acquired from the server's port pool.
 func (container *container) NetIn(hostPort, containerPort uint32) (uint32, uint32, error) {
-	container.logger.Info(fmt.Sprintf("TODO NetIn", hostPort, containerPort))
+	container.logger.Debug("TODO: NetIn")
 
 	return uint32(container.hostPort), ContainerPort, nil
 }
@@ -354,7 +350,7 @@ func (container *container) NetIn(hostPort, containerPort uint32) (uint32, uint3
 // Errors:
 // * An error is returned if the NetOut call fails.
 func (container *container) NetOut(netOutRule garden.NetOutRule) error {
-	container.logger.Info("TODO NetOut")
+	container.logger.Debug("TODO: NetOut")
 	return nil
 }
 
@@ -368,8 +364,6 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 
 	container.runMutex.Lock()
 	defer container.runMutex.Unlock()
-
-	container.logger.Info(fmt.Sprintf("Run command: ", spec.Path, spec.Args, spec.Dir, spec.User, spec.Env))
 
 	// Combine all arguments using ' ' as a separator
 	concatArgs := ""
@@ -391,8 +385,6 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 		splitEnv := strings.SplitN(env, "=", 2)
 		envs[splitEnv[0]] = splitEnv[1]
 	}
-
-	container.logger.Info("Envs", lager.Data{"Env": envs})
 
 	// TODO: Investigate what exactly EmulateConsole does,
 	// as well as console size
@@ -454,8 +446,6 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 // Errors:
 // * processID does not refer to a running process.
 func (container *container) Attach(processID uint32, io garden.ProcessIO) (garden.Process, error) {
-	container.logger.Info(fmt.Sprintf("Attaching to: ", processID))
-
 	cmd := container.pids[int(processID)]
 
 	return cmd, nil
@@ -463,7 +453,7 @@ func (container *container) Attach(processID uint32, io garden.ProcessIO) (garde
 
 // Metrics returns the current set of metrics for a container
 func (container *container) Metrics() (garden.Metrics, error) {
-	container.logger.Info("TODO: implement Metrics()")
+	container.logger.Debug("TODO: Metrics")
 	return garden.Metrics{
 		MemoryStat: garden.ContainerMemoryStat{},
 		CPUStat:    garden.ContainerCPUStat{},
@@ -476,10 +466,6 @@ func (container *container) Properties() (garden.Properties, error) {
 	container.propertiesMutex.RLock()
 	defer container.propertiesMutex.RUnlock()
 
-	container.logger.Info("getting-properties", lager.Data{
-		"properties": container.WindowsContainerSpec.Properties,
-	})
-
 	return container.WindowsContainerSpec.Properties, nil
 }
 
@@ -488,8 +474,6 @@ func (container *container) Properties() (garden.Properties, error) {
 // Errors:
 // * When the property does not exist on the container.
 func (container *container) Property(name string) (string, error) {
-	container.logger.Info("getting-property", lager.Data{"name": name})
-
 	container.propertiesMutex.RLock()
 	defer container.propertiesMutex.RUnlock()
 
@@ -506,8 +490,6 @@ func (container *container) Property(name string) (string, error) {
 // Errors:
 // * None.
 func (container *container) SetProperty(name string, value string) error {
-	container.logger.Info("setting-property", lager.Data{"name": name})
-
 	container.propertiesMutex.Lock()
 	defer container.propertiesMutex.Unlock()
 
@@ -528,8 +510,6 @@ func (container *container) SetProperty(name string, value string) error {
 // Errors:
 // * None.
 func (container *container) RemoveProperty(name string) error {
-	container.logger.Info("removing-property", lager.Data{"name": name})
-
 	container.propertiesMutex.Lock()
 	defer container.propertiesMutex.Unlock()
 
@@ -667,4 +647,52 @@ func (c *container) getComputeSystemNetworkDevice() windows_containers.Device {
 	}
 
 	return dev
+}
+
+func (c *container) getContainerIp() (string, error) {
+
+	// TODO: this is a very inefficient and bad workaround to get the IP
+	// of the container.
+
+	processSpec := garden.ProcessSpec{
+		Path: "ipconfig",
+		Args: []string{},
+		Env:  []string{},
+		Dir:  "c:\\",
+	}
+
+	stdout := bytes.NewBufferString("")
+
+	pio := garden.ProcessIO{
+		Stdin:  nil,
+		Stdout: stdout,
+		Stderr: nil,
+	}
+
+	pt, err := c.Run(processSpec, pio)
+	if err != nil {
+		return "", err
+	}
+
+	_, err = pt.Wait()
+	if err != nil {
+		return "", err
+	}
+
+	output := stdout.String()
+
+	re, err := regexp.Compile(`IPv4 Address. . . . . . . . . . . : (?P<ip>\d+\.\d+\.\d+\.\d+)`)
+	if err != nil {
+		return "", err
+	}
+
+	match := re.FindStringSubmatch(output)
+
+	for i, name := range re.SubexpNames() {
+		if name == "ip" {
+			return match[i], nil
+		}
+	}
+
+	return "", fmt.Errorf("Could not detect container IP address from ipconfig: %s", output)
 }

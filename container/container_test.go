@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudfoundry-incubator/garden-windows/windows_containers"
+	"github.com/pivotal-golang/lager"
 )
 
 func TestMain(m *testing.M) {
@@ -225,14 +225,15 @@ func TestRunInContainerWithNetwork(t *testing.T) {
 
 	assert.Nil(err)
 
-	ipAddress, err := container.getContainerIp()
-	assert.Nil(err)
-
 	processSpec := garden.ProcessSpec{
 		Path: "powershell.exe",
-		Args: []string{"-command \"$l = New-Object System.Net.HttpListener ; $l.Prefixes.Add('http://+:8080/'); $l.Start(); while ($l.IsListening) { $c = $l.GetContext() ; $q = $c.Request; Write-Output (date); $r = $c.Response ; $m = [System.Text.ASCIIEncoding]::ASCII.GetBytes(((gci -path env:*) | Out-String)); $r.ContentLength64 = $m.Length ; $r.OutputStream.Write($m, 0, $m.Length) ; $r.OutputStream.Dispose(); }\""},
-		Env:  []string{},
-		Dir:  "c:\\",
+		Args: []string{
+			fmt.Sprintf(
+				"-command \"$l = New-Object System.Net.HttpListener ; $l.Prefixes.Add('http://%s:8080/'); $l.Start(); while ($l.IsListening) { $c = $l.GetContext() ; $q = $c.Request; Write-Output (date); $r = $c.Response ; $m = [System.Text.ASCIIEncoding]::ASCII.GetBytes(((gci -path env:*) | Out-String)); $r.ContentLength64 = $m.Length ; $r.OutputStream.Write($m, 0, $m.Length) ; $r.OutputStream.Dispose(); }\"",
+				container.containerIp,
+			)},
+		Env: []string{},
+		Dir: "c:\\",
 	}
 
 	pio := garden.ProcessIO{
@@ -245,9 +246,9 @@ func TestRunInContainerWithNetwork(t *testing.T) {
 	assert.Nil(err)
 
 	// Sleep a bit, let the server start
-	time.Sleep(5000 * time.Millisecond)
+	time.Sleep(10000 * time.Millisecond)
 
-	resp, err := http.Get(fmt.Sprintf("http://%s:8080/", ipAddress))
+	resp, err := http.Get(fmt.Sprintf("http://%s:8080/", container.containerIp))
 	assert.Nil(err)
 
 	buf := new(bytes.Buffer)
@@ -315,35 +316,4 @@ func TestRunInContainerWithStreamIn(t *testing.T) {
 
 	output := stdout.String()
 	assert.Contains(output, "file1.txt")
-}
-
-func (c *container) getContainerIp() (string, error) {
-	processSpec := garden.ProcessSpec{
-		Path: "powershell",
-		Args: []string{`-command "(Get-NetIPAddress -AddressFamily IPv4 | where {$_.IPAddress -ne '127.0.0.1'}).IPAddress"`},
-		Env:  []string{},
-		Dir:  "c:\\",
-	}
-
-	stdout := bytes.NewBufferString("")
-
-	pio := garden.ProcessIO{
-		Stdin:  nil,
-		Stdout: stdout,
-		Stderr: nil,
-	}
-
-	pt, err := c.Run(processSpec, pio)
-	if err != nil {
-		return "", err
-	}
-
-	_, err = pt.Wait()
-	if err != nil {
-		return "", err
-	}
-
-	output := stdout.String()
-
-	return strings.Trim(output, "\r\n "), nil
 }
