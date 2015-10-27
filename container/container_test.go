@@ -97,6 +97,52 @@ func TestRunInContainer(t *testing.T) {
 	assert.Equal(0, exitCode)
 }
 
+func TestRunInContainerLinuxPaths(t *testing.T) {
+	assert := assert.New(t)
+
+	logger, _ := cf_lager.New("windows-garden-tests")
+
+	id := uuid.New()
+	handle := id
+	rootPath := "WindowsServerCore:dummy"
+	hostIP := "127.0.0.1"
+	virtualSwitch := "Virtual Switch"
+	driverInfo := windows_containers.NewDriverInfo("c:\\garden-windows\\tests")
+	properties := garden.Properties{}
+
+	containerSpec := garden.ContainerSpec{
+		Handle:     handle,
+		Properties: properties,
+		RootFSPath: rootPath,
+	}
+
+	container, err := NewContainer(id, handle, containerSpec, logger, hostIP, driverInfo, virtualSwitch)
+	defer container.Stop(true)
+
+	assert.Nil(err)
+
+	processSpec := garden.ProcessSpec{
+		Path: "c:\\Windows\\System32\\cmd.exe",
+		Args: []string{"/c", "ver"},
+		Env:  []string{},
+		Dir:  "c:\\",
+	}
+
+	pio := garden.ProcessIO{
+		Stdin:  nil,
+		Stdout: nil,
+		Stderr: nil,
+	}
+
+	pt, err := container.Run(processSpec, pio)
+	assert.Nil(err)
+
+	exitCode, err := pt.Wait()
+
+	assert.Nil(err)
+	assert.Equal(0, exitCode)
+}
+
 func TestRunInContainerWithOutput(t *testing.T) {
 	assert := assert.New(t)
 

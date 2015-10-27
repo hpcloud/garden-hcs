@@ -36,6 +36,14 @@ func Untar(tarStream io.Reader, targetDir string) error {
 			}
 
 		case tar.TypeReg:
+			fullDirectory := filepath.Dir(fullFilename)
+
+			err = os.MkdirAll(fullDirectory, os.FileMode(header.Mode)) // or use 0755 if you prefer
+
+			if err != nil {
+				return err
+			}
+
 			// handle normal file
 			writer, err := os.Create(fullFilename)
 

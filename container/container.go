@@ -1,10 +1,12 @@
 package container
 
 import (
+	"archive/tar"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/rpc"
 	"net/url"
@@ -240,7 +242,9 @@ func (container *container) StreamIn(spec garden.StreamInSpec) error {
 	}
 
 	// Dismount when we're done
-	defer mountvol.UnmountVolume(tempFolder)
+	defer func() {
+		mountvol.UnmountVolume(tempFolder)
+	}()
 
 	// Write the tar stream to the directory
 	outDir := filepath.Join(tempFolder, spec.Path)
@@ -262,7 +266,41 @@ func (container *container) StreamOut(spec garden.StreamOutSpec) (io.ReadCloser,
 	// It is unclear if it's ok to keep the container mounted until the reader
 	// is closed.
 
-	return nil, nil
+	// Create a buffer to write our archive to.
+	buf := new(bytes.Buffer)
+
+	// Create a new tar archive.
+	tw := tar.NewWriter(buf)
+
+	// Add some files to the archive.
+	var files = []struct {
+		Name, Body string
+	}{
+		{"readme.txt", "This is a dummy file from the windows garden."},
+	}
+	for _, file := range files {
+		hdr := &tar.Header{
+			Name: file.Name,
+			Mode: 0600,
+			Size: int64(len(file.Body)),
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			return nil, err
+		}
+		if _, err := tw.Write([]byte(file.Body)); err != nil {
+			return nil, err
+		}
+	}
+
+	// Make sure to check the error on Close.
+	if err := tw.Close(); err != nil {
+		return nil, err
+	}
+
+	// Open the tar archive for reading.
+	r := bytes.NewReader(buf.Bytes())
+
+	return ioutil.NopCloser(r), nil
 }
 
 // Limits the network bandwidth for a container.
