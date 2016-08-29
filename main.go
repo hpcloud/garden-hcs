@@ -6,22 +6,22 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/cloudfoundry-incubator/cf-lager"
-	"github.com/cloudfoundry-incubator/garden/server"
-	"github.com/pivotal-golang/lager"
+	"code.cloudfoundry.org/cflager"
+	"code.cloudfoundry.org/garden/server"
+	"code.cloudfoundry.org/lager"
 
 	"github.com/cloudfoundry-incubator/garden-windows/backend"
-)
-
-var containerGraceTime = flag.Duration(
-	"containerGraceTime",
-	0,
-	"time after which to destroy idle containers",
 )
 
 func main() {
 	defaultListNetwork := "tcp"
 	defaultListAddr := "0.0.0.0:58008"
+
+	var containerGraceTime = flag.Duration(
+		"containerGraceTime",
+		0,
+		"time after which to destroy idle containers",
+	)
 
 	if os.Getenv("PORT") != "" {
 		defaultListNetwork = "tcp"
@@ -48,8 +48,14 @@ func main() {
 
 	var imageRepositoryLocation = flag.String(
 		"containersLocation",
-		"c:\\garden-windows\\containers",
+		"C:\\ProgramData\\garden\\containers",
 		"Location where container images and other artifacts will be stored.",
+	)
+
+	var baseImagePath = flag.String(
+		"baseImagePath",
+		"C:\\ProgramData\\docker\\windowsfilter\\6c03342bf53e2bcaef31f9a32f281fd6c952eb3d3db317692ae39652a77eb818",
+		"Base image path for containers .",
 	)
 
 	var virtualSwitchName = flag.String(
@@ -58,13 +64,13 @@ func main() {
 		"Location where container images and other artifacts will be stored.",
 	)
 
-	cf_lager.AddFlags(flag.CommandLine)
+	cflager.AddFlags(flag.CommandLine)
 	flag.Parse()
 
-	logger, _ := cf_lager.New("garden-windows")
+	logger, _ := cflager.New("garden-windows")
 	logger.Info("Garden Windows started.")
 
-	windowsContainerBackend, err := backend.NewWindowsContainerBackend(*imageRepositoryLocation, *virtualSwitchName, logger, *cellIP)
+	windowsContainerBackend, err := backend.NewWindowsContainerBackend(*imageRepositoryLocation, *baseImagePath, *virtualSwitchName, logger, *cellIP)
 	if err != nil {
 		logger.Fatal("Server Failed to Start", err)
 		os.Exit(1)

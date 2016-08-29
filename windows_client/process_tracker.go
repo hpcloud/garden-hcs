@@ -1,11 +1,11 @@
 package prison_client
 
 import (
-	"fmt"
+	// "fmt"
 
+	"code.cloudfoundry.org/garden"
+	"code.cloudfoundry.org/lager"
 	"github.com/Microsoft/hcsshim"
-	"github.com/cloudfoundry-incubator/garden"
-	"github.com/pivotal-golang/lager"
 )
 
 type ProcessTracker struct {
@@ -31,17 +31,18 @@ func (t *ProcessTracker) Release() error {
 	return nil
 }
 
-func (t *ProcessTracker) ID() uint32 {
-	return t.pid
+func (t *ProcessTracker) ID() string {
+	return string(t.pid)
 }
 
 func (t *ProcessTracker) Wait() (int, error) {
-	exitCode, err := hcsshim.WaitForProcessInComputeSystem(
-		t.containerId,
-		t.pid,
-	)
+	//	exitCode, err := hcsshim.WaitForProcessInComputeSystem(
+	//		t.containerId,
+	//		t.pid,
+	//	)
 
-	return int(exitCode), err
+	// return int(exitCode), err
+	return int(0), nil
 }
 
 func (t *ProcessTracker) SetTTY(garden.TTYSpec) error {
@@ -52,14 +53,14 @@ func (t *ProcessTracker) SetTTY(garden.TTYSpec) error {
 
 func (process ProcessTracker) Signal(signal garden.Signal) error {
 
-	err := hcsshim.TerminateProcessInComputeSystem(
-		process.containerId,
-		process.pid,
-	)
+	//	err := hcsshim.TerminateProcessInComputeSystem(
+	//		process.containerId,
+	//		process.pid,
+	//	)
 
-	if err != nil {
-		process.logger.Info(fmt.Sprintf("Warning - failed to terminate pid %d in %s", process.pid, process.containerId, err))
-	}
+	//	if err != nil {
+	//		process.logger.Info(fmt.Sprintf("Warning - failed to terminate pid %d in %s", process.pid, process.containerId, err))
+	//	}
 
 	// Ignoring errors based on
 	// https://github.com/docker/docker/blob/master/daemon/execdriver/windows/terminatekill.go#L30

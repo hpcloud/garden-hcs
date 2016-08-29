@@ -1,43 +1,39 @@
 package backend
 
-//// importing C will increase the stack size. this is useful
-//// if loading a .NET COM object, because the CLR requires a larger stack
-import "C"
-
 import (
 	"strconv"
 	"sync"
 	"time"
 
+	"code.cloudfoundry.org/garden"
+	"code.cloudfoundry.org/lager"
 	"github.com/Microsoft/hcsshim"
-	"github.com/cloudfoundry-incubator/garden"
-	"github.com/pivotal-golang/lager"
+	"github.com/docker/docker/pkg/stringid"
 
 	"github.com/cloudfoundry-incubator/garden-windows/container"
 	"github.com/cloudfoundry-incubator/garden-windows/windows_containers"
 )
 
 type windowsContainerBackend struct {
-	containerBinaryPath string
-	containerRootPath   string
-	hostIP              string
+	containerRootPath string
+	hostIP            string
 
 	logger lager.Logger
 
-	containerIDs    <-chan string
+	//	containerIDs    <-chan string
 	containers      map[string]garden.Container
 	containersMutex *sync.RWMutex
 
 	driverInfo        hcsshim.DriverInfo
+	baseImagePath     string
 	virtualSwitchName string
 }
 
-func NewWindowsContainerBackend(containerRootPath, virtualSwitchName string, logger lager.Logger, hostIP string) (*windowsContainerBackend, error) {
+func NewWindowsContainerBackend(containerRootPath, virtualSwitchName, baseImagePath string, logger lager.Logger, hostIP string) (*windowsContainerBackend, error) {
 	logger.Debug("WCB: windowsContainerBackend.NewWindowsContainerBackend")
 
-	containerIDs := make(chan string)
-
-	go generateContainerIDs(containerIDs)
+	//	containerIDs := make(chan string)
+	//	go generateContainerIDs(containerIDs)
 
 	return &windowsContainerBackend{
 		containerRootPath: containerRootPath,
@@ -45,12 +41,13 @@ func NewWindowsContainerBackend(containerRootPath, virtualSwitchName string, log
 
 		logger: logger,
 
-		containerIDs:    containerIDs,
+		// containerIDs:    containerIDs,
 		containers:      make(map[string]garden.Container),
 		containersMutex: new(sync.RWMutex),
 
 		virtualSwitchName: virtualSwitchName,
-		driverInfo:        windows_containers.NewDriverInfo(containerRootPath),
+		driverInfo:        windows_containers.NewDriverInfo(baseImagePath),
+		baseImagePath:     baseImagePath,
 	}, nil
 }
 
@@ -67,7 +64,8 @@ func (windowsContainerBackend *windowsContainerBackend) Stop() {
 
 func (windowsContainerBackend *windowsContainerBackend) GraceTime(garden.Container) time.Duration {
 	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.GraceTime")
-	// time after which to destroy idle containers
+
+	// TODO: not implemented
 	return 0
 }
 
@@ -92,9 +90,11 @@ func (windowsContainerBackend *windowsContainerBackend) Capacity() (garden.Capac
 func (windowsContainerBackend *windowsContainerBackend) Create(containerSpec garden.ContainerSpec) (garden.Container, error) {
 	windowsContainerBackend.logger.Info("WCB: backend is going to create a new container")
 
-	id := <-windowsContainerBackend.containerIDs
+	// id := <-windowsContainerBackend.containerIDs
+	id := stringid.GenerateNonCryptoID()
 
 	handle := id
+
 	if containerSpec.Handle != "" {
 		handle = containerSpec.Handle
 	}
@@ -106,6 +106,7 @@ func (windowsContainerBackend *windowsContainerBackend) Create(containerSpec gar
 		windowsContainerBackend.logger,
 		windowsContainerBackend.hostIP,
 		windowsContainerBackend.driverInfo,
+		windowsContainerBackend.baseImagePath,
 		windowsContainerBackend.virtualSwitchName,
 	)
 
@@ -124,7 +125,14 @@ func (windowsContainerBackend *windowsContainerBackend) Destroy(handle string) e
 	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.Destroy")
 
 	if container, ok := windowsContainerBackend.containers[handle]; ok {
-		container.Stop(true)
+		err := container.Stop(true)
+		if err != nil {
+			return err
+		}
+
+		windowsContainerBackend.containersMutex.Lock()
+		delete(windowsContainerBackend.containers, handle)
+		windowsContainerBackend.containersMutex.Unlock()
 	}
 
 	return nil
@@ -144,7 +152,13 @@ func (windowsContainerBackend *windowsContainerBackend) Containers(garden.Proper
 
 func (windowsContainerBackend *windowsContainerBackend) Lookup(handle string) (garden.Container, error) {
 	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.Lookup")
-	return windowsContainerBackend.containers[handle], nil
+
+	res, found := windowsContainerBackend.containers[handle]
+	if found {
+		return res, nil
+	}
+
+	return nil, garden.ContainerNotFoundError{handle}
 }
 
 // BulkInfo returns info or error for a list of containers.
@@ -162,7 +176,7 @@ func (windowsContainerBackend *windowsContainerBackend) BulkInfo(handles []strin
 			result[handle] = garden.ContainerInfoEntry{
 				Info: garden.ContainerInfo{},
 				Err: &garden.Error{
-					ErrorMsg: err.Error(),
+					Err: err,
 				},
 			}
 			continue
@@ -178,7 +192,7 @@ func (windowsContainerBackend *windowsContainerBackend) BulkInfo(handles []strin
 			result[handle] = garden.ContainerInfoEntry{
 				Info: garden.ContainerInfo{},
 				Err: &garden.Error{
-					ErrorMsg: err.Error(),
+					Err: err,
 				},
 			}
 			continue
@@ -196,6 +210,8 @@ func (windowsContainerBackend *windowsContainerBackend) BulkInfo(handles []strin
 // BulkMetrics returns metrics or error for a list of containers.
 func (windowsContainerBackend *windowsContainerBackend) BulkMetrics(handles []string) (map[string]garden.ContainerMetricsEntry, error) {
 	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.BulkMetrics")
+
+	// TODO: not implemented
 	return map[string]garden.ContainerMetricsEntry{}, nil
 }
 

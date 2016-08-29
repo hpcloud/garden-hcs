@@ -57,14 +57,14 @@ type Device struct {
 	Settings   interface{}
 }
 
-type ContainerInit struct {
-	SystemType              string   // HCS requires this to be hard-coded to "Container"
-	Name                    string   // Name of the container. We use the docker ID.
-	Owner                   string   // The management platform that created this container
-	IsDummy                 bool     // Used for development purposes.
-	VolumePath              string   // Windows volume path for scratch space
-	Devices                 []Device // Devices used by the container
-	IgnoreFlushesDuringBoot bool     // Optimisation hint for container startup in Windows
-	LayerFolderPath         string   // Where the layer folders are located
-	Layers                  []Layer  // List of storage layers
-}
+//type ContainerInit struct {
+//	SystemType              string   // HCS requires this to be hard-coded to "Container"
+//	Name                    string   // Name of the container. We use the docker ID.
+//	Owner                   string   // The management platform that created this container
+//	IsDummy                 bool     // Used for development purposes.
+//	VolumePath              string   // Windows volume path for scratch space
+//	Devices                 []Device // Devices used by the container
+//	IgnoreFlushesDuringBoot bool     // Optimisation hint for container startup in Windows
+//	LayerFolderPath         string   // Where the layer folders are located
+//	Layers                  []Layer  // List of storage layers
+//}

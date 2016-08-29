@@ -3,29 +3,27 @@ package container
 import (
 	"archive/tar"
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
-	"net/rpc"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cloudfoundry-incubator/garden-windows/mountvol"
 	"github.com/cloudfoundry-incubator/garden-windows/untar"
 	"github.com/cloudfoundry-incubator/garden-windows/windows_client"
 	"github.com/cloudfoundry-incubator/garden-windows/windows_containers"
 
-	"code.google.com/p/go-uuid/uuid"
+	"code.cloudfoundry.org/garden"
+	"code.cloudfoundry.org/lager"
 	"github.com/Microsoft/hcsshim"
-	"github.com/cloudfoundry-incubator/garden"
-	"github.com/pivotal-golang/lager"
+	"github.com/pborman/uuid"
 )
 
 const (
@@ -45,14 +43,14 @@ func (err UndefinedPropertyError) Error() string {
 }
 
 type container struct {
-	id     string
-	handle string
-	logger lager.Logger
-	hostIP string
-
 	WindowsContainerSpec
 
-	rpc  *rpc.Client
+	id           string
+	handle       string
+	logger       lager.Logger
+	hostIP       string
+	hcsContainer hcsshim.Container
+
 	pids map[int]*prison_client.ProcessTracker
 
 	hostPort      int
@@ -66,9 +64,10 @@ type container struct {
 	virtualSwitch   string
 	layerChain      []string
 	volumeName      string
+	layerFolderPath string
 }
 
-func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger lager.Logger, hostIP string, driverInfo hcsshim.DriverInfo, virtualSwitch string) (*container, error) {
+func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger lager.Logger, hostIP string, driverInfo hcsshim.DriverInfo, baseImagePath, virtualSwitch string) (*container, error) {
 	logger.Debug("WC: NewContainer")
 
 	result := &container{
@@ -96,48 +95,51 @@ func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger 
 	result.hostPort = freeTcp4Port()
 	result.containerPort = ContainerPort
 
-	// Get the shared base image based on our "RootFSPath"
-	// This should be something like "windowsservercore"
-	rootFSURL, err := url.Parse(result.RootFSPath)
-	if err != nil {
-		return nil, err
-	}
-	sharedBaseImageName := rootFSURL.Scheme
-	sharedBaseImage, err := windows_containers.GetSharedBaseImageByName(sharedBaseImageName)
-	if err != nil {
-		return nil, err
-	}
+	//	// Get the shared base image based on our "RootFSPath"
+	//	// This should be something like "windowsservercore"
+	//	rootFSURL, err := url.Parse(result.RootFSPath)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//	sharedBaseImageName := rootFSURL.Scheme
+	//	sharedBaseImage, err := windows_containers.GetSharedBaseImageByName(sharedBaseImageName)
+	//	if err != nil {
+	//		return nil, err
+	//	}
 
-	// This implementation does not currently support a rootfs with multiple layers
-	// So we create our layer chain based on the base shared image
-	result.layerChain = []string{sharedBaseImage.Path}
+	result.layerChain = []string{baseImagePath}
 
-	// Next, create a sandbox layer for the container
-	// Our layer will have the same id as our container
-	err = hcsshim.CreateSandboxLayer(driverInfo, id, result.layerChain[0], result.layerChain)
-	if err != nil {
-		return nil, err
-	}
+	//	// Next, create a sandbox layer for the container
+	//	// Our layer will have the same id as our container
+	//	err := hcsshim.CreateSandboxLayer(driverInfo, id, result.layerChain[0], result.layerChain)
+	//	if err != nil {
+	//		return nil, err
+	//	}
 
-	// Retrieve the mount path for the new layer
-	// This should be something like this: "\\?\Volume{bd05d44f-0000-0000-0000-100000000000}\"
-	result.volumeName, err = result.getMountPathForLayer(id, result.layerChain)
-	if err != nil {
-		return nil, err
-	}
+	//	// Retrieve the mount path for the new layer
+	//	// This should be something like this: "\\?\Volume{bd05d44f-0000-0000-0000-100000000000}\"
+	//	result.volumeName, err = result.getMountPathForLayer(id, result.layerChain)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+
+	layerFolderPath, volumePath, err := windows_containers.CreateAndActivateContainerLayer(driverInfo, id, baseImagePath)
+	result.volumeName = volumePath
+	result.layerFolderPath = layerFolderPath
 
 	// Build a configuration json for creating a compute system
 	configuration, err := result.getComputeSystemConfiguration(result.volumeName, result.layerChain)
 
 	// Create a compute system.
 	// This is our container.
-	err = hcsshim.CreateComputeSystem(id, configuration)
+	hcsContainer, err := hcsshim.CreateContainer(id, configuration)
 	if err != nil {
 		return nil, err
 	}
+	result.hcsContainer = hcsContainer
 
 	// Start the container
-	err = hcsshim.StartComputeSystem(id)
+	err = result.hcsContainer.Start()
 	if err != nil {
 		return nil, err
 	}
@@ -172,6 +174,8 @@ func (container *container) Handle() string {
 // Errors:
 // * None.
 func (container *container) Stop(kill bool) error {
+	var err error
+
 	container.logger.Debug("WC: Stop")
 
 	container.runMutex.Lock()
@@ -180,16 +184,28 @@ func (container *container) Stop(kill bool) error {
 	// TODO: investigate how shutdown and terminate work.
 
 	// Shutdown the compute system
-	hcsshim.ShutdownComputeSystem(container.id)
+	err = container.hcsContainer.Shutdown()
+	if err != nil {
+		return err
+	}
 
 	// Terminate the compute system
-	hcsshim.TerminateComputeSystem(container.id)
+	err = container.hcsContainer.Terminate()
+	if err != nil {
+		return err
+	}
 
 	// Deactivate our layer
-	hcsshim.DeactivateLayer(container.driverInfo, container.id)
+	err = hcsshim.DeactivateLayer(container.driverInfo, container.id)
+	if err != nil {
+		return err
+	}
 
 	// Destroy the sandbox layer
-	hcsshim.DestroyLayer(container.driverInfo, container.id)
+	err = hcsshim.DestroyLayer(container.driverInfo, container.id)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -206,7 +222,7 @@ func (container *container) Info() (garden.ContainerInfo, error) {
 		HostIP:      container.hostIP,
 		ContainerIP: container.containerIp,
 		Events:      []string{},
-		ProcessIDs:  []uint32{},
+		ProcessIDs:  []string{},
 		Properties:  properties,
 		MappedPorts: []garden.PortMapping{
 			garden.PortMapping{
@@ -426,22 +442,28 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 
 	// TODO: Investigate what exactly EmulateConsole does,
 	// as well as console size
-	createProcessParms := hcsshim.CreateProcessParams{
-		EmulateConsole:   false,
-		WorkingDirectory: spec.Dir,
-		ConsoleSize:      [2]int{80, 120},
+	createProcessConfig := &hcsshim.ProcessConfig{
 		CommandLine:      commandLine,
+		WorkingDirectory: spec.Dir,
+		CreateStdErrPipe: pio.Stderr != nil,
+		CreateStdInPipe:  pio.Stdin != nil,
+		CreateStdOutPipe: pio.Stdout != nil,
+		EmulateConsole:   false,
+		ConsoleSize:      [2]int{80, 120},
 		Environment:      envs,
 	}
 
 	// Create the process
-	pid, stdin, stdout, stderr, err := hcsshim.CreateProcessInComputeSystem(
-		container.id,
-		pio.Stdin != nil,
-		pio.Stdout != nil,
-		pio.Stderr != nil,
-		createProcessParms,
-	)
+	hcsProcess, err := container.hcsContainer.CreateProcess(createProcessConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	pid := hcsProcess.Pid()
+	stdin, stdout, stderr, err := hcsProcess.Stdio()
+	if err != nil {
+		return nil, err
+	}
 
 	if err != nil {
 		return nil, err
@@ -470,7 +492,7 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 	}()
 
 	// Create a new process tracker for the process we've just created
-	pt := prison_client.NewProcessTracker(container.id, pid, container.driverInfo, container.logger)
+	pt := prison_client.NewProcessTracker(container.id, uint32(pid), container.driverInfo, container.logger)
 
 	container.logger.Debug("Container run created new process.", lager.Data{
 		"PID": pt.ID(),
@@ -483,8 +505,13 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 //
 // Errors:
 // * processID does not refer to a running process.
-func (container *container) Attach(processID uint32, io garden.ProcessIO) (garden.Process, error) {
-	cmd := container.pids[int(processID)]
+func (container *container) Attach(processID string, io garden.ProcessIO) (garden.Process, error) {
+	pid, err := strconv.Atoi(processID)
+	if err != nil {
+		return nil, err
+	}
+
+	cmd := container.pids[pid]
 
 	return cmd, nil
 }
@@ -560,6 +587,12 @@ func (container *container) RemoveProperty(name string) error {
 	return nil
 }
 
+func (container *container) SetGraceTime(graceTime time.Duration) error {
+	// TODO: not implemented
+
+	return nil
+}
+
 func freeTcp4Port() int {
 	l, _ := net.Listen("tcp4", ":0")
 	defer l.Close()
@@ -617,44 +650,37 @@ func (c *container) getMountPathForLayer(rId string, layerChain []string) (strin
 	return dir, nil
 }
 
-func (c *container) getComputeSystemConfiguration(mountPath string, layerChain []string) (string, error) {
+func (c *container) getComputeSystemConfiguration(mountPath string, layerChain []string) (*hcsshim.ContainerConfig, error) {
 	layerFolderPath := c.dir(c.id)
 
 	// TODO: investigate further when IgnoreFlushesDuringBoot should be false
-	cu := &windows_containers.ContainerInit{
+	cu := &hcsshim.ContainerConfig{
 		SystemType:              "Container",
-		Name:                    c.id,
-		Owner:                   windows_containers.DefaultOwner,
-		IsDummy:                 false,
-		VolumePath:              mountPath,
 		IgnoreFlushesDuringBoot: true,
-		LayerFolderPath:         layerFolderPath,
-		Layers:                  []windows_containers.Layer{},
-		Devices: []windows_containers.Device{
-			c.getComputeSystemNetworkDevice(),
-		},
+		Name:            c.id,
+		Owner:           windows_containers.DefaultOwner,
+		IsDummy:         false,
+		VolumePath:      mountPath,
+		LayerFolderPath: layerFolderPath,
+		Layers:          []hcsshim.Layer{},
+		EndpointList:    []string{},
 	}
 
 	for i := 0; i < len(layerChain); i++ {
-		_, filename := filepath.Split(layerChain[i])
-		g, err := hcsshim.NameToGuid(filename)
+		layerPath := layerChain[i]
+		layerId := filepath.Base(layerPath)
+		layerGuid, err := hcsshim.NameToGuid(layerId)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		cu.Layers = append(cu.Layers, windows_containers.Layer{
-			ID:   g.ToString(),
-			Path: layerChain[i],
+
+		cu.Layers = append(cu.Layers, hcsshim.Layer{
+			ID:   layerGuid.ToString(),
+			Path: layerPath,
 		})
 	}
 
-	configurationb, err := json.Marshal(cu)
-	if err != nil {
-		return "", err
-	}
-
-	configuration := string(configurationb)
-
-	return configuration, nil
+	return cu, nil
 }
 
 // This is a very basic implementation for port mappings

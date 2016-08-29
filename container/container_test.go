@@ -10,16 +10,16 @@ import (
 	"testing"
 	"time"
 
-	"code.google.com/p/go-uuid/uuid"
-	"github.com/cloudfoundry-incubator/cf-lager"
-	"github.com/cloudfoundry-incubator/garden"
+	"code.cloudfoundry.org/cflager"
+	"code.cloudfoundry.org/garden"
+	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudfoundry-incubator/garden-windows/windows_containers"
 )
 
 func TestMain(m *testing.M) {
-	cf_lager.AddFlags(flag.CommandLine)
+	cflager.AddFlags(flag.CommandLine)
 
 	retCode := m.Run()
 
@@ -29,7 +29,7 @@ func TestMain(m *testing.M) {
 func TestCreateContainer(t *testing.T) {
 	assert := assert.New(t)
 
-	logger, _ := cf_lager.New("windows-garden-tests")
+	logger, _ := cflager.New("windows-garden-tests")
 
 	id := uuid.New()
 	handle := id
@@ -54,7 +54,7 @@ func TestCreateContainer(t *testing.T) {
 func TestRunInContainer(t *testing.T) {
 	assert := assert.New(t)
 
-	logger, _ := cf_lager.New("windows-garden-tests")
+	logger, _ := cflager.New("windows-garden-tests")
 
 	id := uuid.New()
 	handle := id
@@ -100,7 +100,7 @@ func TestRunInContainer(t *testing.T) {
 func TestRunInContainerLinuxPaths(t *testing.T) {
 	assert := assert.New(t)
 
-	logger, _ := cf_lager.New("windows-garden-tests")
+	logger, _ := cflager.New("windows-garden-tests")
 
 	id := uuid.New()
 	handle := id
@@ -146,7 +146,7 @@ func TestRunInContainerLinuxPaths(t *testing.T) {
 func TestRunInContainerWithOutput(t *testing.T) {
 	assert := assert.New(t)
 
-	logger, _ := cf_lager.New("windows-garden-tests")
+	logger, _ := cflager.New("windows-garden-tests")
 
 	id := uuid.New()
 	handle := id
@@ -197,7 +197,7 @@ func TestRunInContainerWithOutput(t *testing.T) {
 func TestRunInContainerEnv(t *testing.T) {
 	assert := assert.New(t)
 
-	logger, _ := cf_lager.New("windows-garden-tests")
+	logger, _ := cflager.New("windows-garden-tests")
 
 	id := uuid.New()
 	handle := id
@@ -249,7 +249,7 @@ func TestRunInContainerEnv(t *testing.T) {
 func TestRunInContainerWithNetwork(t *testing.T) {
 	assert := assert.New(t)
 
-	logger, _ := cf_lager.New("windows-garden-tests")
+	logger, _ := cflager.New("windows-garden-tests")
 
 	id := uuid.New()
 	handle := id
@@ -306,7 +306,7 @@ func TestRunInContainerWithNetwork(t *testing.T) {
 func TestRunInContainerWithStreamIn(t *testing.T) {
 	assert := assert.New(t)
 
-	logger, _ := cf_lager.New("windows-garden-tests")
+	logger, _ := cflager.New("windows-garden-tests")
 
 	id := uuid.New()
 	handle := id
