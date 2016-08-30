@@ -29,7 +29,7 @@ type windowsContainerBackend struct {
 	virtualSwitchName string
 }
 
-func NewWindowsContainerBackend(containerRootPath, virtualSwitchName, baseImagePath string, logger lager.Logger, hostIP string) (*windowsContainerBackend, error) {
+func NewWindowsContainerBackend(containerRootPath, baseImagePath, virtualSwitchName string, logger lager.Logger, hostIP string) (*windowsContainerBackend, error) {
 	logger.Debug("WCB: windowsContainerBackend.NewWindowsContainerBackend")
 
 	//	containerIDs := make(chan string)

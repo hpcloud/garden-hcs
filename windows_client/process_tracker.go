@@ -2,6 +2,7 @@ package prison_client
 
 import (
 	// "fmt"
+	"strconv"
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/lager"
@@ -10,16 +11,18 @@ import (
 
 type ProcessTracker struct {
 	pid         uint32
+	hcsProcess  hcsshim.Process
 	containerId string
 	driverInfo  hcsshim.DriverInfo
 
 	logger lager.Logger
 }
 
-func NewProcessTracker(containerId string, pid uint32, driverInfo hcsshim.DriverInfo, logger lager.Logger) *ProcessTracker {
+func NewProcessTracker(containerId string, pid uint32, hcsProcess hcsshim.Process, driverInfo hcsshim.DriverInfo, logger lager.Logger) *ProcessTracker {
 	ret := &ProcessTracker{
 		containerId: containerId,
 		pid:         pid,
+		hcsProcess:  hcsProcess,
 		driverInfo:  driverInfo,
 		logger:      logger,
 	}
@@ -32,17 +35,18 @@ func (t *ProcessTracker) Release() error {
 }
 
 func (t *ProcessTracker) ID() string {
-	return string(t.pid)
+	return strconv.FormatUint(uint64(t.pid), 10)
 }
 
 func (t *ProcessTracker) Wait() (int, error) {
-	//	exitCode, err := hcsshim.WaitForProcessInComputeSystem(
-	//		t.containerId,
-	//		t.pid,
-	//	)
+	err := t.hcsProcess.Wait()
+	if err != nil {
+		return 0, err
+	}
 
-	// return int(exitCode), err
-	return int(0), nil
+	exitCode, err := t.hcsProcess.ExitCode()
+
+	return int(exitCode), nil
 }
 
 func (t *ProcessTracker) SetTTY(garden.TTYSpec) error {

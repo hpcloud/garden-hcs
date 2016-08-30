@@ -145,10 +145,10 @@ func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger 
 	}
 
 	// Get the container's IP address
-	result.containerIp, err = result.getContainerIp()
-	if err != nil {
-		return nil, err
-	}
+	//	result.containerIp, err = result.getContainerIp()
+	//	if err != nil {
+	//		return nil, err
+	//	}
 
 	return result, nil
 }
@@ -185,15 +185,19 @@ func (container *container) Stop(kill bool) error {
 
 	// Shutdown the compute system
 	err = container.hcsContainer.Shutdown()
-	if err != nil {
-		return err
-	}
+	//	if err != nil {
+	//		return err
+	//	}
+
+	container.hcsContainer.Wait()
 
 	// Terminate the compute system
 	err = container.hcsContainer.Terminate()
-	if err != nil {
-		return err
-	}
+	//	if err != nil {
+	//		return err
+	//	}
+
+	container.hcsContainer.Wait()
 
 	// Deactivate our layer
 	err = hcsshim.DeactivateLayer(container.driverInfo, container.id)
@@ -440,16 +444,25 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 		envs[splitEnv[0]] = splitEnv[1]
 	}
 
-	// TODO: Investigate what exactly EmulateConsole does,
-	// as well as console size
+	emulateConsole := true
+	consoleSize := [2]int{0, 0}
+
+	if spec.TTY != nil && spec.TTY.WindowSize != nil {
+		// https://github.com/docker/docker/blob/25587906d122c4fce0eb1fbd3dfb805914455f59/api/client/container/run.go#L145
+		// https: //github.com/docker/docker/blob/3d42bf5f120b6cbd38b54f71dff4343c316939a0/api/client/utils.go#L24
+		consoleSize = [2]int{spec.TTY.WindowSize.Rows, spec.TTY.WindowSize.Columns}
+	} else {
+		emulateConsole = false
+	}
+
 	createProcessConfig := &hcsshim.ProcessConfig{
 		CommandLine:      commandLine,
 		WorkingDirectory: spec.Dir,
 		CreateStdErrPipe: pio.Stderr != nil,
 		CreateStdInPipe:  pio.Stdin != nil,
 		CreateStdOutPipe: pio.Stdout != nil,
-		EmulateConsole:   false,
-		ConsoleSize:      [2]int{80, 120},
+		EmulateConsole:   emulateConsole,
+		ConsoleSize:      consoleSize,
 		Environment:      envs,
 	}
 
@@ -463,6 +476,10 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 	stdin, stdout, stderr, err := hcsProcess.Stdio()
 	if err != nil {
 		return nil, err
+	}
+
+	if emulateConsole {
+		hcsProcess.ResizeConsole(uint16(spec.TTY.WindowSize.Columns), uint16(spec.TTY.WindowSize.Rows))
 	}
 
 	if err != nil {
@@ -492,7 +509,7 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 	}()
 
 	// Create a new process tracker for the process we've just created
-	pt := prison_client.NewProcessTracker(container.id, uint32(pid), container.driverInfo, container.logger)
+	pt := prison_client.NewProcessTracker(container.id, uint32(pid), hcsProcess, container.driverInfo, container.logger)
 
 	container.logger.Debug("Container run created new process.", lager.Data{
 		"PID": pt.ID(),
@@ -743,18 +760,20 @@ func (c *container) getContainerIp() (string, error) {
 		return "", err
 	}
 
-	output := stdout.String()
+	output, err := ioutil.ReadAll(stdout)
 
 	re, err := regexp.Compile(`IPv4 Address. . . . . . . . . . . : (?P<ip>\d+\.\d+\.\d+\.\d+)`)
 	if err != nil {
 		return "", err
 	}
 
-	match := re.FindStringSubmatch(output)
+	match := re.FindStringSubmatch(string(output))
 
 	for i, name := range re.SubexpNames() {
 		if name == "ip" {
-			return match[i], nil
+			if i < len(match) {
+				return match[i], nil
+			}
 		}
 	}
 
