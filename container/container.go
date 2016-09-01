@@ -3,6 +3,8 @@ package container
 import (
 	"archive/tar"
 	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -42,20 +44,27 @@ func (err UndefinedPropertyError) Error() string {
 	return fmt.Sprintf("property does not exist: %s", err.Key)
 }
 
+type portBinding struct {
+	hostPort      uint32
+	containerPort uint32
+}
+
 type container struct {
 	WindowsContainerSpec
 
-	id           string
-	handle       string
-	logger       lager.Logger
-	hostIP       string
-	hcsContainer hcsshim.Container
+	id            string
+	handle        string
+	logger        lager.Logger
+	hostIP        string
+	hcsContainer  hcsshim.Container
+	natEndpointId string
 
 	pids map[int]*prison_client.ProcessTracker
 
 	hostPort      int
 	containerPort int
 	containerIp   string
+	portMappings  []portBinding
 
 	runMutex        sync.Mutex
 	propertiesMutex sync.RWMutex
@@ -124,31 +133,12 @@ func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger 
 	//	}
 
 	layerFolderPath, volumePath, err := windows_containers.CreateAndActivateContainerLayer(driverInfo, id, baseImagePath)
+	if err != nil {
+		return nil, err
+	}
+
 	result.volumeName = volumePath
 	result.layerFolderPath = layerFolderPath
-
-	// Build a configuration json for creating a compute system
-	configuration, err := result.getComputeSystemConfiguration(result.volumeName, result.layerChain)
-
-	// Create a compute system.
-	// This is our container.
-	hcsContainer, err := hcsshim.CreateContainer(id, configuration)
-	if err != nil {
-		return nil, err
-	}
-	result.hcsContainer = hcsContainer
-
-	// Start the container
-	err = result.hcsContainer.Start()
-	if err != nil {
-		return nil, err
-	}
-
-	// Get the container's IP address
-	//	result.containerIp, err = result.getContainerIp()
-	//	if err != nil {
-	//		return nil, err
-	//	}
 
 	return result, nil
 }
@@ -185,19 +175,35 @@ func (container *container) Stop(kill bool) error {
 
 	// Shutdown the compute system
 	err = container.hcsContainer.Shutdown()
-	//	if err != nil {
-	//		return err
-	//	}
+	if err != nil {
+		container.logger.Error("hcsContainer.Shutdown error", err)
+		// return err
+	}
 
-	container.hcsContainer.Wait()
+	err = container.hcsContainer.Wait()
+	if err != nil {
+		container.logger.Error("hcsContainer.Wait error", err)
+		// return err
+	}
 
 	// Terminate the compute system
 	err = container.hcsContainer.Terminate()
-	//	if err != nil {
-	//		return err
-	//	}
+	if err != nil {
+		container.logger.Error("hcsContainer.Terminate error", err)
+		// return err
+	}
 
-	container.hcsContainer.Wait()
+	err = container.hcsContainer.Wait()
+	if err != nil {
+		container.logger.Error("hcsContainer.Wait error", err)
+		// return err
+	}
+
+	_, err = hcsshim.HNSEndpointRequest("DELETE", container.natEndpointId, "")
+	if err != nil {
+		container.logger.Error("hcsshim.HNSEndpointRequest error", err)
+		// return err
+	}
 
 	// Deactivate our layer
 	err = hcsshim.DeactivateLayer(container.driverInfo, container.id)
@@ -394,7 +400,27 @@ func (container *container) CurrentMemoryLimits() (garden.MemoryLimits, error) {
 func (container *container) NetIn(hostPort, containerPort uint32) (uint32, uint32, error) {
 	container.logger.Debug("TODO: NetIn")
 
-	return uint32(container.hostPort), ContainerPort, nil
+	if container.hcsContainer != nil {
+		return 0, 0, errors.New("NetIn calls are not supported after the first Run in a Container")
+	}
+
+	if hostPort == 0 {
+		freePort := freeTcp4Port()
+
+		hostPort = uint32(freePort)
+	}
+
+	if containerPort == 0 {
+		containerPort = hostPort
+	}
+
+	container.portMappings = append(container.portMappings,
+		portBinding{
+			hostPort:      hostPort,
+			containerPort: containerPort,
+		})
+
+	return hostPort, containerPort, nil
 }
 
 // Whitelist outbound network traffic.
@@ -409,6 +435,7 @@ func (container *container) NetIn(hostPort, containerPort uint32) (uint32, uint3
 // * An error is returned if the NetOut call fails.
 func (container *container) NetOut(netOutRule garden.NetOutRule) error {
 	container.logger.Debug("TODO: NetOut")
+
 	return nil
 }
 
@@ -419,6 +446,13 @@ func (container *container) NetOut(netOutRule garden.NetOutRule) error {
 // Errors:
 // * TODO.
 func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (garden.Process, error) {
+
+	if container.hcsContainer == nil {
+		err := container.startContainer()
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	container.runMutex.Lock()
 	defer container.runMutex.Unlock()
@@ -667,7 +701,7 @@ func (c *container) getMountPathForLayer(rId string, layerChain []string) (strin
 	return dir, nil
 }
 
-func (c *container) getComputeSystemConfiguration(mountPath string, layerChain []string) (*hcsshim.ContainerConfig, error) {
+func (c *container) getComputeSystemConfiguration() (*hcsshim.ContainerConfig, error) {
 	layerFolderPath := c.dir(c.id)
 
 	// TODO: investigate further when IgnoreFlushesDuringBoot should be false
@@ -677,14 +711,14 @@ func (c *container) getComputeSystemConfiguration(mountPath string, layerChain [
 		Name:            c.id,
 		Owner:           windows_containers.DefaultOwner,
 		IsDummy:         false,
-		VolumePath:      mountPath,
+		VolumePath:      c.volumeName,
 		LayerFolderPath: layerFolderPath,
 		Layers:          []hcsshim.Layer{},
-		EndpointList:    []string{},
+		EndpointList:    []string{c.natEndpointId},
 	}
 
-	for i := 0; i < len(layerChain); i++ {
-		layerPath := layerChain[i]
+	for i := 0; i < len(c.layerChain); i++ {
+		layerPath := c.layerChain[i]
 		layerId := filepath.Base(layerPath)
 		layerGuid, err := hcsshim.NameToGuid(layerId)
 		if err != nil {
@@ -700,34 +734,99 @@ func (c *container) getComputeSystemConfiguration(mountPath string, layerChain [
 	return cu, nil
 }
 
-// This is a very basic implementation for port mappings
-// TODO: investigate how we can improve this, perhaps try to configure
-// port mappings on NetIn, not when the compute service is created
-func (c *container) getComputeSystemNetworkDevice() windows_containers.Device {
-
-	protocol := "TCP"
-	pbs := []windows_containers.PortBinding{
-		windows_containers.PortBinding{
-			ExternalPort: c.hostPort,
-			InternalPort: c.containerPort,
-			Protocol:     protocol,
-		},
+func (c *container) createNatNetworkEndpoint() error {
+	hcsNets, err := hcsshim.HNSListNetworkRequest("GET", "", "")
+	if err != nil {
+		return err
 	}
 
-	dev := windows_containers.Device{
-		DeviceType: "Network",
-		Connection: &windows_containers.NetworkConnection{
-			NetworkName: c.virtualSwitch,
-			// TODO Windows: Fixme, next line. Needs HCS fix.
-			EnableNat: false,
-			Nat: windows_containers.NatSettings{
-				Name:         windows_containers.DefaultContainerNAT,
-				PortBindings: pbs,
-			},
-		},
+	natNetworkId := ""
+	for _, n := range hcsNets {
+		if n.Name == "nat" {
+			natNetworkId = n.Id
+		}
 	}
 
-	return dev
+	if natNetworkId == "" {
+		return errors.New("Nat network not found")
+	}
+
+	// https://github.com/docker/libnetwork/blob/f9a1590164b878e668eabf889dd79fb6af8eaced/drivers/windows/windows.go#L284
+
+	netInPolicies := []json.RawMessage{}
+
+	for _, pm := range c.portMappings {
+		natPolicy, err := json.Marshal(hcsshim.NatPolicy{
+			Type:         "NAT",
+			ExternalPort: uint16(pm.hostPort),
+			InternalPort: uint16(pm.containerPort),
+			Protocol:     "TCP",
+		})
+		if err != nil {
+			return err
+		}
+
+		netInPolicies = append(netInPolicies, natPolicy)
+	}
+
+	endpointRequest := hcsshim.HNSEndpoint{
+		// Name:           "endpoint 1",
+		VirtualNetwork: natNetworkId,
+	}
+
+	endpointRequest.Policies = netInPolicies
+
+	endpointRequestJson, err := json.Marshal(endpointRequest)
+	if err != nil {
+		return err
+	}
+	endpoint, err := hcsshim.HNSEndpointRequest("POST", "", string(endpointRequestJson))
+	if err != nil {
+		return err
+	}
+
+	c.containerIp = endpoint.IPAddress.String()
+	c.natEndpointId = endpoint.Id
+	c.logger.Info(fmt.Sprintf("Nat endpoint created %v IP Addrss %v", endpoint.Id, endpoint.IPAddress.String()))
+
+	return nil
+}
+
+func (c *container) startContainer() error {
+	// TODO: add a lock
+
+	if c.hcsContainer == nil {
+		c.logger.Info(fmt.Sprintf("Starting container %v", c.id))
+
+		err := c.createNatNetworkEndpoint()
+		if err != nil {
+			return err
+		}
+
+		// Build a configuration json for creating a compute system
+		configuration, err := c.getComputeSystemConfiguration()
+		if err != nil {
+			return err
+		}
+
+		c.logger.Info(fmt.Sprintf("HCS create config", lager.Data{"HCSContainerConfig": configuration}))
+
+		// Create a compute system.
+		// This is our container.
+		hcsContainer, err := hcsshim.CreateContainer(c.id, configuration)
+		if err != nil {
+			return err
+		}
+		c.hcsContainer = hcsContainer
+
+		// Start the container
+		err = c.hcsContainer.Start()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (c *container) getContainerIp() (string, error) {
