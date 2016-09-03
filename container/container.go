@@ -65,8 +65,10 @@ type container struct {
 	containerPort int
 	containerIp   string
 	portMappings  []portBinding
+	bindMounts    []garden.BindMount
 
 	runMutex        sync.Mutex
+	startMutex      sync.Mutex
 	propertiesMutex sync.RWMutex
 	driverInfo      hcsshim.DriverInfo
 	active          int
@@ -90,6 +92,7 @@ func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger 
 		driverInfo:    driverInfo,
 		active:        0,
 		virtualSwitch: virtualSwitch,
+		bindMounts:    containerSpec.BindMounts,
 	}
 
 	result.Env = containerSpec.Env
@@ -173,36 +176,38 @@ func (container *container) Stop(kill bool) error {
 
 	// TODO: investigate how shutdown and terminate work.
 
-	// Shutdown the compute system
-	err = container.hcsContainer.Shutdown()
-	if err != nil {
-		container.logger.Error("hcsContainer.Shutdown error", err)
-		// return err
-	}
+	if container.hcsContainer != nil {
+		// Shutdown the compute system
+		err = container.hcsContainer.Shutdown()
+		if err != nil {
+			container.logger.Error("hcsContainer.Shutdown error", err)
+			// return err
+		}
 
-	err = container.hcsContainer.Wait()
-	if err != nil {
-		container.logger.Error("hcsContainer.Wait error", err)
-		// return err
-	}
+		err = container.hcsContainer.Wait()
+		if err != nil {
+			container.logger.Error("hcsContainer.Wait error", err)
+			// return err
+		}
 
-	// Terminate the compute system
-	err = container.hcsContainer.Terminate()
-	if err != nil {
-		container.logger.Error("hcsContainer.Terminate error", err)
-		// return err
-	}
+		// Terminate the compute system
+		err = container.hcsContainer.Terminate()
+		if err != nil {
+			container.logger.Error("hcsContainer.Terminate error", err)
+			// return err
+		}
 
-	err = container.hcsContainer.Wait()
-	if err != nil {
-		container.logger.Error("hcsContainer.Wait error", err)
-		// return err
-	}
+		err = container.hcsContainer.Wait()
+		if err != nil {
+			container.logger.Error("hcsContainer.Wait error", err)
+			// return err
+		}
 
-	_, err = hcsshim.HNSEndpointRequest("DELETE", container.natEndpointId, "")
-	if err != nil {
-		container.logger.Error("hcsshim.HNSEndpointRequest error", err)
-		// return err
+		_, err = hcsshim.HNSEndpointRequest("DELETE", container.natEndpointId, "")
+		if err != nil {
+			container.logger.Error("hcsshim.HNSEndpointRequest error", err)
+			// return err
+		}
 	}
 
 	// Deactivate our layer
@@ -285,7 +290,7 @@ func (container *container) StreamIn(spec garden.StreamInSpec) error {
 //
 // Errors:
 // * TODO.
-func (container *container) StreamOut(spec garden.StreamOutSpec) (io.ReadCloser, error) {
+func (container *container) StreamOut2(spec garden.StreamOutSpec) (io.ReadCloser, error) {
 	container.logger.Debug("TODO: StreamOut")
 
 	// TODO: investigate a proper implementation
@@ -327,6 +332,42 @@ func (container *container) StreamOut(spec garden.StreamOutSpec) (io.ReadCloser,
 	r := bytes.NewReader(buf.Bytes())
 
 	return ioutil.NopCloser(r), nil
+}
+
+// StreamOut streams a file out of a container.
+//
+// Errors:
+// * TODO.
+func (container *container) StreamOut(spec garden.StreamOutSpec) (io.ReadCloser, error) {
+	container.logger.Debug("TODO: StreamOut")
+
+	// TODO: investigate a proper implementation
+	// It is unclear if it's ok to keep the container mounted until the reader
+	// is closed.
+
+	tarReaderPipe, tarWriterPipe := io.Pipe()
+
+	// Get container directory
+	layerFolder := container.dir(container.id)
+
+	// Generate a temporary directory path
+	tempFolder := layerFolder + "-" + uuid.New()
+
+	// Mount the volume
+	err := mountvol.MountVolume(container.volumeName, tempFolder)
+	if err != nil {
+		return nil, err
+	}
+
+	// Write the tar stream to the directory
+	sourceDir := filepath.Join(tempFolder, spec.Path)
+
+	go func() {
+		untar.Tarit(sourceDir, tarWriterPipe)
+		mountvol.UnmountVolume(tempFolder)
+	}()
+
+	return tarReaderPipe, nil
 }
 
 // Limits the network bandwidth for a container.
@@ -457,14 +498,32 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 	container.runMutex.Lock()
 	defer container.runMutex.Unlock()
 
+	//https://blogs.msdn.microsoft.com/twistylittlepassagesallalike/2011/04/23/everyone-quotes-command-line-arguments-the-wrong-way/
 	// Combine all arguments using ' ' as a separator
+
+	// TODO: EscapeArg from https://golang.org/src/syscall/exec_windows.go
 	concatArgs := ""
 	for _, v := range spec.Args {
-		concatArgs = concatArgs + " " + v
+		vp := v
+		vp = strings.Replace(vp, "\n", "\r\n", -1)
+
+		if strings.Count(vp, " ") != 0 {
+			concatArgs = concatArgs + " " + "\"" + vp + "\""
+		} else {
+			concatArgs = concatArgs + " " + vp
+		}
+	}
+
+	fmt.Println(spec.Args)  // DEBUG
+	fmt.Println(concatArgs) // DEBUG
+
+	executablePath := spec.Path
+	if executablePath[1] != ':' {
+		executablePath = "C:" + filepath.FromSlash(executablePath)
 	}
 
 	// Create the command line that we're going to run
-	commandLine := fmt.Sprintf("%s %s", spec.Path, concatArgs)
+	commandLine := fmt.Sprintf("%s %s", executablePath, concatArgs)
 
 	// Create an env var map
 	envs := map[string]string{}
@@ -708,17 +767,17 @@ func (c *container) getComputeSystemConfiguration() (*hcsshim.ContainerConfig, e
 	cu := &hcsshim.ContainerConfig{
 		SystemType:              "Container",
 		IgnoreFlushesDuringBoot: true,
-		Name:            c.id,
-		Owner:           windows_containers.DefaultOwner,
-		IsDummy:         false,
-		VolumePath:      c.volumeName,
-		LayerFolderPath: layerFolderPath,
-		Layers:          []hcsshim.Layer{},
-		EndpointList:    []string{c.natEndpointId},
+		Name:              c.id,
+		Owner:             windows_containers.DefaultOwner,
+		IsDummy:           false,
+		VolumePath:        c.volumeName,
+		LayerFolderPath:   layerFolderPath,
+		Layers:            []hcsshim.Layer{},
+		EndpointList:      []string{c.natEndpointId},
+		MappedDirectories: []hcsshim.MappedDir{},
 	}
 
-	for i := 0; i < len(c.layerChain); i++ {
-		layerPath := c.layerChain[i]
+	for _, layerPath := range c.layerChain {
 		layerId := filepath.Base(layerPath)
 		layerGuid, err := hcsshim.NameToGuid(layerId)
 		if err != nil {
@@ -729,6 +788,31 @@ func (c *container) getComputeSystemConfiguration() (*hcsshim.ContainerConfig, e
 			ID:   layerGuid.ToString(),
 			Path: layerPath,
 		})
+	}
+
+	// https://github.com/cloudfoundry/garden/blob/f90a312c91dc1d586c15a42ca29959445bdd25a1/client.go#L161
+	for _, bindMount := range c.bindMounts {
+		srcPath := bindMount.SrcPath
+		dstPath := bindMount.DstPath
+
+		if dstPath[1] != ':' {
+			dstPath = "C:" + filepath.FromSlash(dstPath)
+		}
+
+		if bindMount.Origin == garden.BindMountOriginHost {
+			readOnly := bindMount.Mode == garden.BindMountModeRO
+			mappedDir := hcsshim.MappedDir{
+				HostPath:      srcPath,
+				ContainerPath: dstPath,
+				ReadOnly:      readOnly,
+			}
+			cu.MappedDirectories = append(cu.MappedDirectories, mappedDir)
+
+			fmt.Println(srcPath, dstPath)
+		}
+		if bindMount.Origin == garden.BindMountOriginContainer {
+			return nil, errors.New("'Container' bind mount mode not supported")
+		}
 	}
 
 	return cu, nil
@@ -793,7 +877,8 @@ func (c *container) createNatNetworkEndpoint() error {
 }
 
 func (c *container) startContainer() error {
-	// TODO: add a lock
+	c.startMutex.Lock()
+	defer c.startMutex.Unlock()
 
 	if c.hcsContainer == nil {
 		c.logger.Info(fmt.Sprintf("Starting container %v", c.id))
