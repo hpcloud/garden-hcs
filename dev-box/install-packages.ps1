@@ -13,7 +13,7 @@ iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/in
 
 # Install golang
 
-choco install processhacker git mingw ruby win32-openssh -y
+choco install processhacker git mingw ruby win32-openssh visualstudiocode -y
 
 choco install golang --version 1.7.1 -y
 
