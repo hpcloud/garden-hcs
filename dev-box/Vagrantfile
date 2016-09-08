@@ -1,8 +1,6 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
-Vagrant.require_plugin "vagrant-reload"
-
 Vagrant.configure(2) do |config|
   # Created with https://github.com/StefanScherer/packer-windows/tree/00dfa8024827170867dfa915178211f19360aedf
   # packer build --only=virtualbox-iso --var 'iso_url=D:/software/en_windows_server_2016_technical_preview_5_x64_dvd_8512312.iso' ./windows_2016_docker.json
@@ -25,7 +23,7 @@ Vagrant.configure(2) do |config|
     & C:\\diego-kit\\intall-packages.ps1
   SHELL
 
-  config.vm.provision :reload 
+  config.vm.provision :reload
 
   config.vm.provision "shell", inline: <<-SHELL
     & C:\\diego-kit\\intall-diego.ps1
