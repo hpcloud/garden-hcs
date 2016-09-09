@@ -8,8 +8,42 @@
 - Add windows2016 to diego lifecycle_bundles: "buildpack/windows2016:windows2016_app_lifecycle/windows2016_app_lifecycle.tgz"
 ```
 # Run the following script to change the diego deployment manifest to add the extra windows2016 lifecycle_bundle
+
 cd ~/workspace/diego-release
-curl https://gist.githubusercontent.com/stefanschneider/96c509bdeb1197ed99eba174d4b95d0c/raw/36e95b722697724b61011f48463f478b12464ced/windows2016_stack.patch  | git apply
+
+git apply << EOM
+diff --git a/manifest-generation/diego.yml b/manifest-generation/diego.yml
+index b20b724..9d64b4f 100644
+--- a/manifest-generation/diego.yml
++++ b/manifest-generation/diego.yml
+@@ -602,6 +602,12 @@ properties:
+       dropsonde_port: (( config_from_cf.metron_agent.dropsonde_incoming_port ))
+       log_level: (( property_overrides.cc_uploader.log_level || nil ))
+     nsync:
++      lifecycle_bundles:
++        - "buildpack/cflinuxfs2:buildpack_app_lifecycle/buildpack_app_lifecycle.tgz"
++        - "buildpack/windows2012R2:windows_app_lifecycle/windows_app_lifecycle.tgz"
++        - "buildpack/windows2016:windows2016_app_lifecycle/windows2016_app_lifecycle.tgz"
++        - "docker:docker_app_lifecycle/docker_app_lifecycle.tgz"
++
+       diego_privileged_containers: (( property_overrides.nsync.diego_privileged_containers || nil ))
+       dropsonde_port: (( config_from_cf.metron_agent.dropsonde_incoming_port ))
+       bbs:
+@@ -618,6 +624,12 @@ properties:
+         basic_auth_password: (( config_from_cf.cc.internal_api_password ))
+       log_level: (( property_overrides.nsync.log_level || nil ))
+     stager:
++      lifecycle_bundles:
++        - "buildpack/cflinuxfs2:buildpack_app_lifecycle/buildpack_app_lifecycle.tgz"
++        - "buildpack/windows2012R2:windows_app_lifecycle/windows_app_lifecycle.tgz"
++        - "buildpack/windows2016:windows2016_app_lifecycle/windows2016_app_lifecycle.tgz"
++        - "docker:docker_app_lifecycle/docker_app_lifecycle.tgz"
++
+       diego_privileged_containers: (( property_overrides.stager.diego_privileged_containers || nil ))
+       dropsonde_port: (( config_from_cf.metron_agent.dropsonde_incoming_port ))
+       cc:
+EOM
+
 ./scripts/generate-bosh-lite-manifests
 bosh -n --deployment ~/workspace/diego-release/bosh-lite/deployments/diego.yml deploy
 ```
