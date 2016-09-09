@@ -62,24 +62,6 @@ bosh -n download manifest cf-warden $wd\cf-warden.yml
 bosh -n download manifest cf-warden-diego $wd\cf-warden-diego.yml
 bosh deployment $wd\cf-warden-diego.yml
 
-# Download a build for https://github.com/stefanschneider/windows_app_lifecycle/tree/w2016 - https://ci.appveyor.com/project/StefanSchneider/windows-app-lifecycle-qc4gr/build/artifacts
-# iwr -UseBasicParsing -Verbose -OutFile windows2016_app_lifecycle.tgz https://ci.appveyor.com/api/buildjobs/pd548dr6m8900v8s/artifacts/output%2Fwindows_app_lifecycle-97ebc3a.tgz
-echo @"
-
-# Run this from a linux box with bosh_cli installed and access to bosh-lite (bosh scp does not work from Windows
-
-bosh -n target 192.168.50.4 lite
-bosh -n login admin admin
-bosh -n download manifest cf-warden-diego cf-warden-diego.yml
-bosh deployment cf-warden-diego.yml
-
-curl -L -o windows2016_app_lifecycle.tgz "https://ci.appveyor.com/api/buildjobs/pd548dr6m8900v8s/artifacts/output%2Fwindows_app_lifecycle-97ebc3a.tgz"
-bosh scp access_z1/0 windows2016_app_lifecycle.tgz /tmp/windows2016_app_lifecycle.tgz  --upload
-bosh ssh access_z1/0 -- sudo mkdir -p /var/vcap/jobs/file_server/packages/windows2016_app_lifecycle "&&" sudo cp /tmp/windows2016_app_lifecycle.tgz /var/vcap/jobs/file_server/packages/windows2016_app_lifecycle/windows2016_app_lifecycle.tgz
-
-# After patching the windows2016_app_lifecycle, run this on windows to flush the diego executor cache: Restart-Service RepServce
-"@
-
 cf api --skip-ssl-validation api.bosh-lite.com
 cf auth admin admin
 # cf curl /v2/stacks -X POST -d '{"name":"windows2016","description":"Windows Server Core 2016"}' # Does not work form PS
