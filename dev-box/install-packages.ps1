@@ -33,7 +33,7 @@ if (-not (Test-Path "$env:SystemRoot\nssm.exe")) {
 
 # Install liteide
 if (-not (Test-Path "$env:ProgramFiles\liteide")) {
-  Invoke-WebRequest -OutFile "$env:TEMP\liteide-windows.zip" -UseBasicParsing "http://netix.dl.sourceforge.net/project/liteide/X30.2/liteidex30.2.windows-qt4.zip"
+  Invoke-WebRequest -OutFile "$env:TEMP\liteide-windows.zip" -UseBasicParsing "http://vorboss.dl.sourceforge.net/project/liteide/X30.2/liteidex30.2.windows-qt5.zip"
   Expand-Archive -Path "$env:TEMP\liteide-windows.zip" -DestinationPath $env:ProgramFiles
 
   if ([Environment]::GetEnvironmentVariable("Path", [EnvironmentVariableTarget]::Machine) -inotlike "*$env:ProgramFiles\liteide\bin*") {
@@ -46,6 +46,11 @@ if (-not (Test-Path "$env:ProgramFiles\liteide")) {
   $Shortcut = $WScriptShell.CreateShortcut($ShortcutFile)
   $Shortcut.TargetPath = $TargetFile
   $Shortcut.Save()
+
+  # Run as admin http://stackoverflow.com/questions/28997799/how-to-create-a-run-as-administrator-shortcut-using-powershell
+  $bytes = [System.IO.File]::ReadAllBytes($ShortcutFile)
+  $bytes[0x15] = $bytes[0x15] -bor 0x20 #set byte 21 (0x15) bit 6 (0x20) ON
+  [System.IO.File]::WriteAllBytes($ShortcutFile, $bytes)
 }
 
 # Install cf cli
