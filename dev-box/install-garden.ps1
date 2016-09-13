@@ -77,7 +77,8 @@ cf target -o diego -s diego
 
 cd $wd
 git clone https://github.com/hpcloud/cf-exe-buildpack
-cf create-buildpack cf-exe-buildpack exe_buildpack 100 --enable
+cf create-buildpack exe_buildpack cf-exe-buildpack 100 --enable
+cf update-buildpack exe_buildpack -p cf-exe-buildpack
 
 cd $wd
 git clone https://github.com/cloudfoundry/wats
