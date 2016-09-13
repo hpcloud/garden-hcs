@@ -54,7 +54,7 @@ func main() {
 
 	var baseImagePath = flag.String(
 		"baseImagePath",
-		"C:\\ProgramData\\docker\\windowsfilter\\6c03342bf53e2bcaef31f9a32f281fd6c952eb3d3db317692ae39652a77eb818",
+		"",
 		"Base image path for containers .",
 	)
 

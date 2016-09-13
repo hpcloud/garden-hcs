@@ -28,10 +28,6 @@ import (
 	"github.com/pborman/uuid"
 )
 
-const (
-	ContainerPort = 8080
-)
-
 type WindowsContainerSpec struct {
 	garden.ContainerSpec
 }
@@ -42,11 +38,6 @@ type UndefinedPropertyError struct {
 
 func (err UndefinedPropertyError) Error() string {
 	return fmt.Sprintf("property does not exist: %s", err.Key)
-}
-
-type portBinding struct {
-	hostPort      uint32
-	containerPort uint32
 }
 
 type container struct {
@@ -64,7 +55,7 @@ type container struct {
 	hostPort      int
 	containerPort int
 	containerIp   string
-	portMappings  []portBinding
+	portMappings  []garden.PortMapping
 	bindMounts    []garden.BindMount
 
 	runMutex        sync.Mutex
@@ -105,37 +96,14 @@ func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger 
 	// This is because there is currently no way to change network settings
 	// for a compute system that's already been created.
 	result.hostPort = freeTcp4Port()
-	result.containerPort = ContainerPort
 
-	//	// Get the shared base image based on our "RootFSPath"
-	//	// This should be something like "windowsservercore"
-	//	rootFSURL, err := url.Parse(result.RootFSPath)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	sharedBaseImageName := rootFSURL.Scheme
-	//	sharedBaseImage, err := windows_containers.GetSharedBaseImageByName(sharedBaseImageName)
-	//	if err != nil {
-	//		return nil, err
-	//	}
+	layerChain, err := windows_containers.GetLayerChain(baseImagePath)
+	result.layerChain = layerChain
+	if err != nil {
+		return nil, err
+	}
 
-	result.layerChain = []string{baseImagePath}
-
-	//	// Next, create a sandbox layer for the container
-	//	// Our layer will have the same id as our container
-	//	err := hcsshim.CreateSandboxLayer(driverInfo, id, result.layerChain[0], result.layerChain)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-
-	//	// Retrieve the mount path for the new layer
-	//	// This should be something like this: "\\?\Volume{bd05d44f-0000-0000-0000-100000000000}\"
-	//	result.volumeName, err = result.getMountPathForLayer(id, result.layerChain)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-
-	layerFolderPath, volumePath, err := windows_containers.CreateAndActivateContainerLayer(driverInfo, id, baseImagePath)
+	layerFolderPath, volumePath, err := windows_containers.CreateAndActivateContainerLayer(driverInfo, id, layerChain)
 	if err != nil {
 		return nil, err
 	}
@@ -239,12 +207,7 @@ func (container *container) Info() (garden.ContainerInfo, error) {
 		Events:      []string{},
 		ProcessIDs:  []string{},
 		Properties:  properties,
-		MappedPorts: []garden.PortMapping{
-			garden.PortMapping{
-				HostPort:      uint32(container.hostPort),
-				ContainerPort: ContainerPort,
-			},
-		},
+		MappedPorts: container.portMappings,
 	}
 
 	return result, nil
@@ -456,9 +419,9 @@ func (container *container) NetIn(hostPort, containerPort uint32) (uint32, uint3
 	}
 
 	container.portMappings = append(container.portMappings,
-		portBinding{
-			hostPort:      hostPort,
-			containerPort: containerPort,
+		garden.PortMapping{
+			HostPort:      hostPort,
+			ContainerPort: containerPort,
 		})
 
 	return hostPort, containerPort, nil
@@ -842,8 +805,8 @@ func (c *container) createNatNetworkEndpoint() error {
 	for _, pm := range c.portMappings {
 		natPolicy, err := json.Marshal(hcsshim.NatPolicy{
 			Type:         "NAT",
-			ExternalPort: uint16(pm.hostPort),
-			InternalPort: uint16(pm.containerPort),
+			ExternalPort: uint16(pm.HostPort),
+			InternalPort: uint16(pm.ContainerPort),
 			Protocol:     "TCP",
 		})
 		if err != nil {
