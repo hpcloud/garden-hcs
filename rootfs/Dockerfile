@@ -6,7 +6,7 @@
 # Use the following PS snippet to get the -baseImagePath argument for garden:
 #  (docker inspect garden-rootfs | ConvertFrom-Json).GraphDriver.Data.Dir
 
-FROM windowsservercore
+FROM microsoft/windowsservercore
 
 # Install VC Redist and features
 RUN powershell.exe -Command \

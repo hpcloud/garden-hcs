@@ -17,12 +17,14 @@ git remote add hpcloud https://github.com/hpcloud/garden-hcs
 go get -v $gardenHcsPackage
 $gardenExePath = "$env:GOPATH/bin/$leafPath.exe"
 
+echo "Creating base image for garden. This takes several minutes"
+cd $env:GOPATH/src/$gardenHcsPackage/rootfs
+docker build -t garden-rootfs .
 
-$baseImagePath = (docker inspect microsoft/windowsservercore  | ConvertFrom-Json).GraphDriver.Data.Dir
-$baseImageId = Split-Path -Leaf (docker inspect microsoft/windowsservercore  | ConvertFrom-Json).GraphDriver.Data.Dir
+
+$baseImagePath = (docker inspect garden-rootfs  | ConvertFrom-Json).GraphDriver.Data.Dir
 
 $machineIp = (Find-NetRoute -RemoteIPAddress "192.168.50.4")[0].IPAddress
-
 
 
 $gardenArgs = " -listenAddr 0.0.0.0:9241 -logLevel debug -cellIP $machineIp -baseImagePath $baseImagePath "
@@ -83,4 +85,11 @@ cd wats\assets\webapp
 echo 'webapp.exe' | Out-File -Encoding ascii  run.bat
 # cf push exeapp -s windows2016 -b https://github.com/hpcloud/cf-exe-buildpack -c webapp.exe
 cf push exeapp -s windows2016
-# cf logs exeapp --recent
+(iwr -UseBasicParsing exeapp.bosh-lite.com).Content
+
+cd $wd
+git clone https://github.com/cloudfoundry/wats
+cd wats/assets/nora/NoraPublished
+cf push nora -s windows2016 -b "https://github.com/hpcloud/cf-iis8-buildpack#develop"
+# cf push nora -s windows2016 -b "https://github.com/stefanschneider/windows_app_lifecycle#buildpack-extraction"
+(iwr -UseBasicParsing nora.bosh-lite.com).Content
