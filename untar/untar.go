@@ -25,7 +25,7 @@ func Untar(tarStream io.Reader, targetDir string) error {
 
 		// get the individual filename and extract to the target directory
 		filename := header.Name
-		fullFilename := filepath.Join(targetDir, filename)
+		fullFilename := "\\\\?\\" + filepath.Join(targetDir, filename)
 
 		switch header.Typeflag {
 		case tar.TypeDir:
@@ -106,7 +106,7 @@ func Tarit(source string, target io.WriteCloser) error {
 				return nil
 			}
 
-			file, err := os.Open(path)
+			file, err := os.Open("\\\\?\\" + path)
 			if err != nil {
 				return err
 			}
