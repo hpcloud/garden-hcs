@@ -54,8 +54,10 @@ echo  " $leafPath.exe $gardenArgs"
 # Optional - Install extra dev/debug tools and push a windows app
 
 go get -v github.com/onsi/ginkgo/ginkgo
-go get -v github.com/stefanschneider/gaol
 go get -v github.com/tools/godep
+
+go get -v github.com/stefanschneider/gaol
+setx /m GAOL_TARGET 127.0.0.1:9241
 
 gem install bosh_cli -N
 bosh -n target 192.168.50.4 lite
