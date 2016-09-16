@@ -135,9 +135,6 @@ func (container *container) Handle() string {
 // Errors:
 // * None.
 func (container *container) Stop(kill bool) error {
-	const shutdownTimeout = time.Minute * 5
-	const terminateTimeout = time.Minute * 5
-
 	var err error
 
 	container.logger.Debug("WC: Stop")
@@ -145,28 +142,33 @@ func (container *container) Stop(kill bool) error {
 	container.runMutex.Lock()
 	defer container.runMutex.Unlock()
 
-	// https://github.com/docker/docker/blob/cf58eb437c4229e876f2d952a228b603a074e584/libcontainerd/container_windows.go#L281-L318
+	// TODO: investigate how shutdown and terminate work.
 
 	if container.hcsContainer != nil {
-		// Terminate the compute system
-		err = container.hcsContainer.Terminate()
-		if hcsshim.IsPending(err) {
-			err = container.hcsContainer.WaitTimeout(terminateTimeout)
-			if err != nil {
-				container.logger.Error("hcsContainer.WaitTimeout error", err)
-			}
-		} else if !hcsshim.IsAlreadyStopped(err) {
-			container.logger.Error("hcsContainer.Terminate error", err)
+		// Shutdown the compute system
+		err = container.hcsContainer.Shutdown()
+		if err != nil {
+			container.logger.Error("hcsContainer.Shutdown error", err)
+			// return err
 		}
 
-		err = container.hcsContainer.Shutdown()
-		if hcsshim.IsPending(err) {
-			err = container.hcsContainer.WaitTimeout(shutdownTimeout)
-			if err != nil {
-				container.logger.Error("hcsContainer.WaitTimeout error", err)
-			}
-		} else if !hcsshim.IsAlreadyStopped(err) {
-			container.logger.Error("hcsContainer.Shutdown error", err)
+		err = container.hcsContainer.Wait()
+		if err != nil {
+			container.logger.Error("hcsContainer.Wait error", err)
+			// return err
+		}
+
+		// Terminate the compute system
+		err = container.hcsContainer.Terminate()
+		if err != nil {
+			container.logger.Error("hcsContainer.Terminate error", err)
+			// return err
+		}
+
+		err = container.hcsContainer.Wait()
+		if err != nil {
+			container.logger.Error("hcsContainer.Wait error", err)
+			// return err
 		}
 
 		_, err = hcsshim.HNSEndpointRequest("DELETE", container.natEndpointId, "")
