@@ -501,12 +501,12 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 	}
 
 	emulateConsole := true
-	consoleSize := [2]int{0, 0}
+	consoleSize := [2]uint{0, 0}
 
 	if spec.TTY != nil && spec.TTY.WindowSize != nil {
 		// https://github.com/docker/docker/blob/25587906d122c4fce0eb1fbd3dfb805914455f59/api/client/container/run.go#L145
 		// https: //github.com/docker/docker/blob/3d42bf5f120b6cbd38b54f71dff4343c316939a0/api/client/utils.go#L24
-		consoleSize = [2]int{spec.TTY.WindowSize.Rows, spec.TTY.WindowSize.Columns}
+		consoleSize = [2]uint{uint(spec.TTY.WindowSize.Rows), uint(spec.TTY.WindowSize.Columns)}
 	} else {
 		emulateConsole = false
 	}
