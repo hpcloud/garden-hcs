@@ -83,6 +83,14 @@ cf create-buildpack exe_buildpack cf-exe-buildpack 100 --enable
 cf update-buildpack exe_buildpack -p cf-exe-buildpack
 
 cd $wd
+git clone https://github.com/hpcloud/cf-iis8-buildpack
+Push-Location .\cf-iis8-buildpack
+git checkout develop
+Pop-Location
+cf create-buildpack iis8_buildpack cf-iis8-buildpack 100 --enable
+cf update-buildpack iis8_buildpack -p cf-iis8-buildpack
+
+cd $wd
 git clone https://github.com/cloudfoundry/wats
 cd wats\assets\webapp
 echo 'webapp.exe' | Out-File -Encoding ascii  run.bat
