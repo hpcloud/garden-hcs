@@ -17,10 +17,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudfoundry-incubator/garden-windows/mountvol"
-	"github.com/cloudfoundry-incubator/garden-windows/untar"
-	"github.com/cloudfoundry-incubator/garden-windows/windows_client"
-	"github.com/cloudfoundry-incubator/garden-windows/windows_containers"
+	"github.com/hpcloud/garden-hcs/mountvol"
+	"github.com/hpcloud/garden-hcs/untar"
+	"github.com/hpcloud/garden-hcs/windows_client"
+	"github.com/hpcloud/garden-hcs/windows_containers"
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/lager"

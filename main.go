@@ -10,7 +10,7 @@ import (
 	"code.cloudfoundry.org/garden/server"
 	"code.cloudfoundry.org/lager"
 
-	"github.com/cloudfoundry-incubator/garden-windows/backend"
+	"github.com/hpcloud/garden-hcs/backend"
 )
 
 func main() {

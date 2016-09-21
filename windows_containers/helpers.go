@@ -10,9 +10,12 @@ import (
 	"github.com/Microsoft/hcsshim"
 )
 
-const (
-	filterDriver = 1
-)
+// defaultOwner is a tag passed to HCS to allow it to differentiate between
+// container creator management stacks. We hard code "garden-windows" in the case
+// of garden-windows.
+const DefaultOwner = "garden-windows"
+
+const filterDriver = 1
 
 func NewDriverInfo(homeDir string) hcsshim.DriverInfo {
 	return hcsshim.DriverInfo{

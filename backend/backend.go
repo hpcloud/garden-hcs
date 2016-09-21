@@ -10,8 +10,8 @@ import (
 	"github.com/Microsoft/hcsshim"
 	"github.com/docker/docker/pkg/stringid"
 
-	"github.com/cloudfoundry-incubator/garden-windows/container"
-	"github.com/cloudfoundry-incubator/garden-windows/windows_containers"
+	"github.com/hpcloud/garden-hcs/container"
+	"github.com/hpcloud/garden-hcs/windows_containers"
 )
 
 type windowsContainerBackend struct {

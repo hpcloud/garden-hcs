@@ -4,7 +4,7 @@ cd $wd
 
 # Make a local clone from the vagrant share and build garden-hcs
 
-$gardenHcsPackage = "github.com/cloudfoundry-incubator/garden-windows"
+$gardenHcsPackage = "github.com/hpcloud/garden-hcs"
 $parentPath = Split-Path -Parent $gardenHcsPackage
 $leafPath = Split-Path -Leaf $gardenHcsPackage
 mkdir -Force $env:GOPATH/src/$parentPath

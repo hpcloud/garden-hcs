@@ -1,7 +1,6 @@
 package prison_client
 
 import (
-	// "fmt"
 	"strconv"
 
 	"code.cloudfoundry.org/garden"

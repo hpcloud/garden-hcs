@@ -1,11 +1,7 @@
-garden-windows.exe
+garden-hcs.exe
 /diego/artifacts
-/prison/msbuild
 /bin
 /gin-bin
-/lattice/consul_data
-/lattice/logs
-/lattice/pids
 coverage.xml
 /diego/bin
 diego-installer.exe
