@@ -15,7 +15,7 @@ cd $env:GOPATH/src/$gardenHcsPackage
 git pull
 git remote add hpcloud https://github.com/hpcloud/garden-hcs
 go get -v $gardenHcsPackage
-$gardenExePath = "$env:GOPATH/bin/$leafPath.exe"
+$gardenExePath = "$env:GOPATH\bin\$leafPath.exe"
 
 echo "Creating base image for garden. This takes several minutes"
 cd $env:GOPATH/src/$gardenHcsPackage/rootfs
