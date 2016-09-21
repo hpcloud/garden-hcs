@@ -1,0 +1,96 @@
+{
+	"ImportPath": "github.com/hpcloud/garden-hcs",
+	"GoVersion": "go1.7",
+	"GodepVersion": "v74",
+	"Deps": [
+		{
+			"ImportPath": "code.cloudfoundry.org/cflager",
+			"Rev": "3b0406dd8038bb31452dfaf171c4f0efa55393bf"
+		},
+		{
+			"ImportPath": "code.cloudfoundry.org/garden",
+			"Comment": "go-wshd-842-ga13ae02",
+			"Rev": "a13ae028cd3219c013713b9f3f85805ea9b85f60"
+		},
+		{
+			"ImportPath": "code.cloudfoundry.org/garden/routes",
+			"Comment": "go-wshd-842-ga13ae02",
+			"Rev": "a13ae028cd3219c013713b9f3f85805ea9b85f60"
+		},
+		{
+			"ImportPath": "code.cloudfoundry.org/garden/server",
+			"Comment": "go-wshd-842-ga13ae02",
+			"Rev": "a13ae028cd3219c013713b9f3f85805ea9b85f60"
+		},
+		{
+			"ImportPath": "code.cloudfoundry.org/garden/server/bomberman",
+			"Comment": "go-wshd-842-ga13ae02",
+			"Rev": "a13ae028cd3219c013713b9f3f85805ea9b85f60"
+		},
+		{
+			"ImportPath": "code.cloudfoundry.org/garden/server/streamer",
+			"Comment": "go-wshd-842-ga13ae02",
+			"Rev": "a13ae028cd3219c013713b9f3f85805ea9b85f60"
+		},
+		{
+			"ImportPath": "code.cloudfoundry.org/garden/server/timebomb",
+			"Comment": "go-wshd-842-ga13ae02",
+			"Rev": "a13ae028cd3219c013713b9f3f85805ea9b85f60"
+		},
+		{
+			"ImportPath": "code.cloudfoundry.org/garden/transport",
+			"Comment": "go-wshd-842-ga13ae02",
+			"Rev": "a13ae028cd3219c013713b9f3f85805ea9b85f60"
+		},
+		{
+			"ImportPath": "code.cloudfoundry.org/lager",
+			"Rev": "62951a8009ab331bb21dc418074fa54e66eb9b6a"
+		},
+		{
+			"ImportPath": "github.com/Microsoft/go-winio",
+			"Comment": "v0.3.5-2-gce2922f",
+			"Rev": "ce2922f643c8fd76b46cadc7f404a06282678b34"
+		},
+		{
+			"ImportPath": "github.com/Microsoft/hcsshim",
+			"Comment": "v0.4.3-10-g7172c87",
+			"Rev": "7172c871ab738ab8318e2b9832923a5d736d156a"
+		},
+		{
+			"ImportPath": "github.com/Sirupsen/logrus",
+			"Comment": "v0.10.0-38-g3ec0642",
+			"Rev": "3ec0642a7fb6488f65b06f9040adc67e3990296a"
+		},
+		{
+			"ImportPath": "github.com/bmizerany/pat",
+			"Rev": "c068ca2f0aacee5ac3681d68e4d0a003b7d1fd2c"
+		},
+		{
+			"ImportPath": "github.com/docker/docker/pkg/random",
+			"Comment": "docs-v1.12.0-rc4-2016-07-15-1662-gfd1037b",
+			"Rev": "fd1037b4325c1ae5b2e68d6f39ee0cd58a0a7d48"
+		},
+		{
+			"ImportPath": "github.com/docker/docker/pkg/stringid",
+			"Comment": "docs-v1.12.0-rc4-2016-07-15-1662-gfd1037b",
+			"Rev": "fd1037b4325c1ae5b2e68d6f39ee0cd58a0a7d48"
+		},
+		{
+			"ImportPath": "github.com/pborman/uuid",
+			"Comment": "v1.0-15-gb984ec7",
+			"Rev": "b984ec7fa9ff9e428bd0cf0abf429384dfbe3e37"
+		},
+		{
+			"ImportPath": "github.com/tedsuo/rata",
+			"Rev": "b15ebd8bd97ae9202eb00c076d59b2f2824bce37"
+		},
+		{
+			"ImportPath": "golang.org/x/sys/unix",
+			"Rev": "8f0908ab3b2457e2e15403d3697c9ef5cb4b57a9"
+		},
+		{
+			"ImportPath": "golang.org/x/sys/windows",
+			"Rev": "8f0908ab3b2457e2e15403d3697c9ef5cb4b57a9"
+		}
+	]
+}
