@@ -12,7 +12,7 @@ Get-CimInstance Win32_Product  -Filter "Name = 'DiegoWindows'" | Invoke-CimMetho
 
 ## Download installers
 
-$diegoReleaseVersion="v0.438"
+$diegoReleaseVersion="v0.443"
 curl -UseBasicParsing -OutFile $wd\DiegoWindows.msi https://github.com/cloudfoundry/diego-windows-release/releases/download/$diegoReleaseVersion/DiegoWindows.msi -Verbose
 curl -UseBasicParsing -OutFile $wd\generate.exe https://github.com/cloudfoundry/diego-windows-release/releases/download/$diegoReleaseVersion/generate.exe -Verbose
 curl -UseBasicParsing -OutFile $wd\hakim.exe https://github.com/cloudfoundry/diego-windows-release/releases/download/$diegoReleaseVersion/hakim.exe -Verbose
