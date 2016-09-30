@@ -63,6 +63,10 @@ curl -L -o windows2016_app_lifecycle.tgz "https://ci.appveyor.com/api/buildjobs/
 bosh scp access_z1/0 windows2016_app_lifecycle.tgz /tmp/windows2016_app_lifecycle.tgz  --upload
 bosh ssh access_z1/0 -- sudo mkdir -p /var/vcap/jobs/file_server/packages/windows2016_app_lifecycle "&&" sudo cp /tmp/windows2016_app_lifecycle.tgz /var/vcap/jobs/file_server/packages/windows2016_app_lifecycle/windows2016_app_lifecycle.tgz
 ```
+- Add windows2016 stack to Cloud Foundry deployment
+```
+cf curl /v2/stacks -X POST -d '{"name":"windows2016","description":"Windows Server Core 2016"}'
+```
 
 ## Usage
 Run `vagrant up` from the dev-box directory and wait for the deployment to complete.
