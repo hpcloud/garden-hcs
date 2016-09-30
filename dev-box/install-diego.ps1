@@ -6,8 +6,6 @@ cd $wd
 ## Cleanup previous installations
 
 echo "Trying to uninstall DiegoWindows"
-
-# gwmi Win32_Product -Filter "Name = 'DiegoWindows'" | % { $_.Uninstall() }
 Get-CimInstance Win32_Product  -Filter "Name = 'DiegoWindows'" | Invoke-CimMethod -MethodName Uninstall
 
 ## Download installers
@@ -16,12 +14,6 @@ $diegoReleaseVersion="v0.443"
 curl -UseBasicParsing -OutFile $wd\DiegoWindows.msi https://github.com/cloudfoundry/diego-windows-release/releases/download/$diegoReleaseVersion/DiegoWindows.msi -Verbose
 curl -UseBasicParsing -OutFile $wd\generate.exe https://github.com/cloudfoundry/diego-windows-release/releases/download/$diegoReleaseVersion/generate.exe -Verbose
 curl -UseBasicParsing -OutFile $wd\hakim.exe https://github.com/cloudfoundry/diego-windows-release/releases/download/$diegoReleaseVersion/hakim.exe -Verbose
-
-
-# Dependencies
-
-# Make sure powershell is installed
-Install-WindowsFeature PowerShell
 
 
 ## Setup diego networking
@@ -112,17 +104,17 @@ Get-EventLog Application -Source rep,metron,consul -Newest 100 | % {echo ($_.Tim
 
 echo "Diego components start logs: $wd\bootstarp.log"
 
+# Make sure the diego windows-app-lifecycle is configured for windows2016 stack
 # https://ci.appveyor.com/project/StefanSchneider/windows-app-lifecycle-qc4gr/build/artifacts
-
 
 echo "Checking Consul health"
 echo (curl -UseBasicParsing http://127.0.0.1:8500/).StatusDescription
+
+echo "Consul members"
+& 'C:\Program Files\CloudFoundry\DiegoWindows\consul.exe' members
 
 #echo "Checking Rep health"
 #echo (curl -UseBasicParsing "http://${machineIp}:1800/ping").StatusDescription
 
 #echo "Interogating Rep status"
 #echo (curl -UseBasicParsing "http://${machineIp}:1800/state").Content | ConvertFrom-Json
-
-echo "Consul members"
-& 'C:\Program Files\CloudFoundry\DiegoWindows\consul.exe' members

@@ -2,9 +2,10 @@
 # vi: set ft=ruby :
 
 Vagrant.configure(2) do |config|
-  # Created with https://github.com/StefanScherer/packer-windows/tree/00dfa8024827170867dfa915178211f19360aedf
-  # packer build --only=virtualbox-iso --var 'iso_url=D:/software/en_windows_server_2016_technical_preview_5_x64_dvd_8512312.iso' ./windows_2016_docker.json
-  config.vm.box = "https://gardenhcs.azureedge.net/windows_2016_docker_virtualbox_v2.box"
+  # Created with https://github.com/StefanScherer/packer-windows/tree/b2a7684f75b533091733ae5fb25609af233e1284
+  # packer build --only=virtualbox-iso --var 'iso_url=D:/software/14393.0.160715-1616.RS1_RELEASE_SERVER_EVAL_X64FRE_EN-US.ISO' ./windows_2016_docker.json
+  # vagrant box add windows_2016_docker_virtualbox.box   --name windows_2016_docker_virtualbox_rs1_v1
+  config.vm.box = "windows_2016_docker_virtualbox_rs1_v1"
 
   config.vm.synced_folder "../", "/garden-hcs"
   config.vm.network "private_network", ip: "192.168.50.16"

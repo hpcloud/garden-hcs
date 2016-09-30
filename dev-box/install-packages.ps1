@@ -2,10 +2,10 @@ $wd="C:\diego-kit"
 mkdir -Force $wd
 cd $wd
 
-# Remove Windows Defender for extra performance
-Write-Output "Disable and remove Windows-Defender"
+# Disable Windows Defender for extra performance
+Write-Output "Disable Windows-Defender"
 Set-MpPreference -DisableRealtimeMonitoring $true
-Remove-WindowsFeature -Name Windows-Defender
+# Remove-WindowsFeature -Name Windows-Defender
 
 # Dependencies
 iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
