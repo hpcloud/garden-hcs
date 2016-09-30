@@ -47,7 +47,7 @@ Start-Service GardenHcs
 echo " "
 echo "Gatden client (gaol) usage example:"
 echo " gaol /t 127.0.0.1:9241 list"
-echo "To run garden manually with the following start script:"
+echo "To run garden manually use the following start script:"
 echo  " $leafPath.exe $gardenArgs"
 
 

@@ -59,7 +59,7 @@ bosh -n login admin admin
 bosh -n download manifest cf-warden-diego cf-warden-diego.yml
 bosh deployment cf-warden-diego.yml
 
-curl -L -o windows2016_app_lifecycle.tgz "https://ci.appveyor.com/api/buildjobs/pd548dr6m8900v8s/artifacts/output%2Fwindows_app_lifecycle-97ebc3a.tgz"
+curl -L -o windows2016_app_lifecycle.tgz "https://ci.appveyor.com/api/buildjobs/ov1lgry9q45deebg/artifacts/output%2Fwindows_app_lifecycle-1c8273c.tgz"
 bosh scp access_z1/0 windows2016_app_lifecycle.tgz /tmp/windows2016_app_lifecycle.tgz  --upload
 bosh ssh access_z1/0 -- sudo mkdir -p /var/vcap/jobs/file_server/packages/windows2016_app_lifecycle "&&" sudo cp /tmp/windows2016_app_lifecycle.tgz /var/vcap/jobs/file_server/packages/windows2016_app_lifecycle/windows2016_app_lifecycle.tgz
 ```
