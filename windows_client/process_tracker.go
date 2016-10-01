@@ -9,10 +9,14 @@ import (
 )
 
 type ProcessTracker struct {
+	garden.Process
+
 	pid         uint32
 	hcsProcess  hcsshim.Process
 	containerId string
 	driverInfo  hcsshim.DriverInfo
+	stoppedChan chan interface{}
+	exitCode    int
 
 	logger lager.Logger
 }
@@ -24,13 +28,16 @@ func NewProcessTracker(containerId string, pid uint32, hcsProcess hcsshim.Proces
 		hcsProcess:  hcsProcess,
 		driverInfo:  driverInfo,
 		logger:      logger,
+		stoppedChan: make(chan interface{}),
 	}
 
-	return ret
-}
+	go func() {
+		ret.waitForExitcode()
+		close(ret.stoppedChan)
+		ret.release()
+	}()
 
-func (t *ProcessTracker) Release() error {
-	return nil
+	return ret
 }
 
 func (t *ProcessTracker) ID() string {
@@ -38,35 +45,51 @@ func (t *ProcessTracker) ID() string {
 }
 
 func (t *ProcessTracker) Wait() (int, error) {
+	<-t.stoppedChan
+
+	return t.exitCode, nil
+}
+
+func (t *ProcessTracker) SetTTY(ttySpec garden.TTYSpec) error {
+	err := t.hcsProcess.ResizeConsole(uint16(ttySpec.WindowSize.Columns), uint16(ttySpec.WindowSize.Rows))
+	if err != nil {
+		t.logger.Error("hcsProcess.ResizeConsole error", err)
+	}
+
+	return err
+}
+
+func (t *ProcessTracker) Signal(signal garden.Signal) error {
+	if signal == garden.SignalKill || signal == garden.SignalTerminate {
+		err := t.hcsProcess.Kill()
+		t.logger.Error("hcsProcess.Kill error", err)
+		return err
+	}
+
+	return nil
+}
+
+func (t *ProcessTracker) waitForExitcode() {
+	// https://github.com/docker/docker/blob/97660c6ec55f45416cb2b2d4c116267864b62b65/libcontainerd/container_windows.go#L164-L191
+
 	err := t.hcsProcess.Wait()
 	if err != nil {
-		return 0, err
+		t.logger.Error("hcsProcess.Wait error", err)
 	}
 
 	exitCode, err := t.hcsProcess.ExitCode()
+	if err != nil {
+		t.logger.Error("hcsProcess.ExitCode error", err)
 
-	return int(exitCode), nil
+		exitCode = -1
+	}
+
+	t.exitCode = exitCode
 }
 
-func (t *ProcessTracker) SetTTY(garden.TTYSpec) error {
-	// TODO: Investigate what this is supposed to do
-	// and how it can be implemented on Windows
-	return nil
-}
-
-func (process ProcessTracker) Signal(signal garden.Signal) error {
-
-	//	err := hcsshim.TerminateProcessInComputeSystem(
-	//		process.containerId,
-	//		process.pid,
-	//	)
-
-	//	if err != nil {
-	//		process.logger.Info(fmt.Sprintf("Warning - failed to terminate pid %d in %s", process.pid, process.containerId, err))
-	//	}
-
-	// Ignoring errors based on
-	// https://github.com/docker/docker/blob/master/daemon/execdriver/windows/terminatekill.go#L30
-
-	return nil
+func (t *ProcessTracker) release() {
+	err := t.hcsProcess.Close()
+	if err != nil {
+		t.logger.Error("hcsProcess.Close error", err)
+	}
 }
