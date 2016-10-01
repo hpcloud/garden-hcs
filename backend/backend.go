@@ -21,7 +21,7 @@ type windowsContainerBackend struct {
 	logger lager.Logger
 
 	//	containerIDs    <-chan string
-	containers      map[string]garden.Container
+	containers      map[string]*container.WindowsContainer
 	containersMutex *sync.RWMutex
 
 	driverInfo        hcsshim.DriverInfo
@@ -42,7 +42,7 @@ func NewWindowsContainerBackend(containerRootPath, baseImagePath, virtualSwitchN
 		logger: logger,
 
 		// containerIDs:    containerIDs,
-		containers:      make(map[string]garden.Container),
+		containers:      make(map[string]*container.WindowsContainer),
 		containersMutex: new(sync.RWMutex),
 
 		virtualSwitchName: virtualSwitchName,
@@ -125,7 +125,7 @@ func (windowsContainerBackend *windowsContainerBackend) Destroy(handle string) e
 	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.Destroy")
 
 	if container, ok := windowsContainerBackend.containers[handle]; ok {
-		err := container.Stop(true)
+		err := container.Destroy()
 		if err != nil {
 			return err
 		}

@@ -1,7 +1,6 @@
 package container
 
 import (
-	"archive/tar"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -40,7 +39,7 @@ func (err UndefinedPropertyError) Error() string {
 	return fmt.Sprintf("property does not exist: %s", err.Key)
 }
 
-type container struct {
+type WindowsContainer struct {
 	WindowsContainerSpec
 
 	id            string
@@ -69,10 +68,10 @@ type container struct {
 	layerFolderPath string
 }
 
-func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger lager.Logger, hostIP string, driverInfo hcsshim.DriverInfo, baseImagePath, virtualSwitch string) (*container, error) {
+func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger lager.Logger, hostIP string, driverInfo hcsshim.DriverInfo, baseImagePath, virtualSwitch string) (*WindowsContainer, error) {
 	logger.Debug("WC: NewContainer")
 
-	result := &container{
+	result := &WindowsContainer{
 		id:     id,
 		handle: handle,
 
@@ -114,7 +113,7 @@ func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger 
 	return result, nil
 }
 
-func (container *container) Handle() string {
+func (container *WindowsContainer) Handle() string {
 	container.logger.Debug("WC: Handle")
 	return container.handle
 }
@@ -134,7 +133,7 @@ func (container *container) Handle() string {
 //
 // Errors:
 // * None.
-func (container *container) Stop(kill bool) error {
+func (container *WindowsContainer) Stop(kill bool) error {
 	const shutdownTimeout = time.Minute * 5
 	const terminateTimeout = time.Minute * 5
 
@@ -148,51 +147,91 @@ func (container *container) Stop(kill bool) error {
 	// https://github.com/docker/docker/blob/cf58eb437c4229e876f2d952a228b603a074e584/libcontainerd/container_windows.go#L281-L318
 
 	if container.hcsContainer != nil {
-		// Terminate the compute system
-		err = container.hcsContainer.Terminate()
-		if hcsshim.IsPending(err) {
-			err = container.hcsContainer.WaitTimeout(terminateTimeout)
-			if err != nil {
-				container.logger.Error("hcsContainer.WaitTimeout error", err)
+		if kill == true {
+			// Terminate the compute system
+			err = container.hcsContainer.Terminate()
+			if hcsshim.IsPending(err) {
+				err = container.hcsContainer.WaitTimeout(terminateTimeout)
+				if err != nil {
+					container.logger.Error("hcsContainer.WaitTimeout error", err)
+				}
+			} else if !hcsshim.IsAlreadyStopped(err) {
+				container.logger.Error("hcsContainer.Terminate error", err)
+				return err
 			}
-		} else if !hcsshim.IsAlreadyStopped(err) {
-			container.logger.Error("hcsContainer.Terminate error", err)
+		} else {
+			err = container.hcsContainer.Shutdown()
+			if hcsshim.IsPending(err) {
+				err = container.hcsContainer.WaitTimeout(shutdownTimeout)
+				if err != nil {
+					container.logger.Error("hcsContainer.WaitTimeout error", err)
+				}
+			} else if !hcsshim.IsAlreadyStopped(err) {
+				container.logger.Error("hcsContainer.Shutdown error", err)
+
+				// Call terminate if shutdown fails
+				err = container.hcsContainer.Terminate()
+				if hcsshim.IsPending(err) {
+					err = container.hcsContainer.WaitTimeout(terminateTimeout)
+					if err != nil {
+						container.logger.Error("hcsContainer.WaitTimeout error", err)
+					}
+				} else if !hcsshim.IsAlreadyStopped(err) {
+					container.logger.Error("hcsContainer.Terminate error", err)
+				}
+
+				return err
+			}
 		}
 
-		err = container.hcsContainer.Shutdown()
-		if hcsshim.IsPending(err) {
-			err = container.hcsContainer.WaitTimeout(shutdownTimeout)
-			if err != nil {
-				container.logger.Error("hcsContainer.WaitTimeout error", err)
-			}
-		} else if !hcsshim.IsAlreadyStopped(err) {
-			container.logger.Error("hcsContainer.Shutdown error", err)
+		err = container.hcsContainer.Close()
+		if err != nil {
+			container.logger.Error("hcsContainer.Close error", err)
+			return err
 		}
 
+		container.hcsContainer = nil
+	}
+
+	return nil
+}
+
+func (container *WindowsContainer) Destroy() error {
+	var err error
+
+	container.logger.Debug("WC: Destroy")
+
+	container.Stop(true)
+
+	container.runMutex.Lock()
+	defer container.runMutex.Unlock()
+
+	if container.natEndpointId != "" {
 		_, err = hcsshim.HNSEndpointRequest("DELETE", container.natEndpointId, "")
 		if err != nil {
 			container.logger.Error("hcsshim.HNSEndpointRequest error", err)
-			// return err
+		} else {
+			container.natEndpointId = ""
 		}
 	}
 
 	// Deactivate our layer
 	err = hcsshim.DeactivateLayer(container.driverInfo, container.id)
 	if err != nil {
-		return err
+		container.logger.Error("hcsshim.DeactivateLayer error", err)
 	}
 
 	// Destroy the sandbox layer
 	err = hcsshim.DestroyLayer(container.driverInfo, container.id)
 	if err != nil {
-		return err
+		container.logger.Error("hcsshim.DestroyLayer error", err)
 	}
 
-	return nil
+	return err
 }
 
 // Returns information about a container.
-func (container *container) Info() (garden.ContainerInfo, error) {
+func (container *WindowsContainer) Info() (garden.ContainerInfo, error) {
 	container.logger.Debug("WC: Info")
 
 	properties, _ := container.Properties()
@@ -215,7 +254,7 @@ func (container *container) Info() (garden.ContainerInfo, error) {
 //
 // Errors:
 // *  TODO.
-func (container *container) StreamIn(spec garden.StreamInSpec) error {
+func (container *WindowsContainer) StreamIn(spec garden.StreamInSpec) error {
 	container.logger.Debug("WC: StreamIn")
 
 	container.runMutex.Lock()
@@ -251,55 +290,7 @@ func (container *container) StreamIn(spec garden.StreamInSpec) error {
 //
 // Errors:
 // * TODO.
-func (container *container) StreamOut2(spec garden.StreamOutSpec) (io.ReadCloser, error) {
-	container.logger.Debug("TODO: StreamOut")
-
-	// TODO: investigate a proper implementation
-	// It is unclear if it's ok to keep the container mounted until the reader
-	// is closed.
-
-	// Create a buffer to write our archive to.
-	buf := new(bytes.Buffer)
-
-	// Create a new tar archive.
-	tw := tar.NewWriter(buf)
-
-	// Add some files to the archive.
-	var files = []struct {
-		Name, Body string
-	}{
-		{"readme.txt", "This is a dummy file from the windows garden."},
-	}
-	for _, file := range files {
-		hdr := &tar.Header{
-			Name: file.Name,
-			Mode: 0600,
-			Size: int64(len(file.Body)),
-		}
-		if err := tw.WriteHeader(hdr); err != nil {
-			return nil, err
-		}
-		if _, err := tw.Write([]byte(file.Body)); err != nil {
-			return nil, err
-		}
-	}
-
-	// Make sure to check the error on Close.
-	if err := tw.Close(); err != nil {
-		return nil, err
-	}
-
-	// Open the tar archive for reading.
-	r := bytes.NewReader(buf.Bytes())
-
-	return ioutil.NopCloser(r), nil
-}
-
-// StreamOut streams a file out of a container.
-//
-// Errors:
-// * TODO.
-func (container *container) StreamOut(spec garden.StreamOutSpec) (io.ReadCloser, error) {
+func (container *WindowsContainer) StreamOut(spec garden.StreamOutSpec) (io.ReadCloser, error) {
 	container.logger.Debug("TODO: StreamOut")
 
 	// TODO: investigate a proper implementation
@@ -332,23 +323,23 @@ func (container *container) StreamOut(spec garden.StreamOutSpec) (io.ReadCloser,
 }
 
 // Limits the network bandwidth for a container.
-func (container *container) LimitBandwidth(limits garden.BandwidthLimits) error {
+func (container *WindowsContainer) LimitBandwidth(limits garden.BandwidthLimits) error {
 	container.logger.Debug("TODO: LimitBandwidth")
 	return nil
 }
 
-func (container *container) CurrentBandwidthLimits() (garden.BandwidthLimits, error) {
+func (container *WindowsContainer) CurrentBandwidthLimits() (garden.BandwidthLimits, error) {
 	container.logger.Debug("WC: CurrentBandwidthLimits")
 	return garden.BandwidthLimits{}, nil
 }
 
 // Limits the CPU shares for a container.
-func (container *container) LimitCPU(limits garden.CPULimits) error {
+func (container *WindowsContainer) LimitCPU(limits garden.CPULimits) error {
 	container.logger.Debug("TODO: LimitCPU")
 	return nil
 }
 
-func (container *container) CurrentCPULimits() (garden.CPULimits, error) {
+func (container *WindowsContainer) CurrentCPULimits() (garden.CPULimits, error) {
 	container.logger.Debug("WC: CurrentCPULimits")
 	return garden.CPULimits{}, nil
 }
@@ -359,12 +350,12 @@ func (container *container) CurrentCPULimits() (garden.CPULimits, error) {
 // Files/directories created by its privileged user are not subject to these limits.
 //
 // TODO: explain how disk management works.
-func (container *container) LimitDisk(limits garden.DiskLimits) error {
+func (container *WindowsContainer) LimitDisk(limits garden.DiskLimits) error {
 	container.logger.Debug("TODO: LimitDisk")
 	return nil
 }
 
-func (container *container) CurrentDiskLimits() (garden.DiskLimits, error) {
+func (container *WindowsContainer) CurrentDiskLimits() (garden.DiskLimits, error) {
 	container.logger.Debug("WC: CurrentDiskLimits")
 	return garden.DiskLimits{}, nil
 }
@@ -376,12 +367,12 @@ func (container *container) CurrentDiskLimits() (garden.DiskLimits, error) {
 //
 // Errors:
 // * The kernel does not support setting memory.memsw.limit_in_bytes.
-func (container *container) LimitMemory(limits garden.MemoryLimits) error {
+func (container *WindowsContainer) LimitMemory(limits garden.MemoryLimits) error {
 	container.logger.Debug("TODO: LimitMemory")
 	return nil
 }
 
-func (container *container) CurrentMemoryLimits() (garden.MemoryLimits, error) {
+func (container *WindowsContainer) CurrentMemoryLimits() (garden.MemoryLimits, error) {
 	container.logger.Debug("WC: CurrentMemoryLimits")
 	return garden.MemoryLimits{}, nil
 }
@@ -399,7 +390,7 @@ func (container *container) CurrentMemoryLimits() (garden.MemoryLimits, error) {
 //
 // Errors:
 // * When no port can be acquired from the server's port pool.
-func (container *container) NetIn(hostPort, containerPort uint32) (uint32, uint32, error) {
+func (container *WindowsContainer) NetIn(hostPort, containerPort uint32) (uint32, uint32, error) {
 	container.logger.Debug("TODO: NetIn")
 
 	if container.hcsContainer != nil {
@@ -435,7 +426,7 @@ func (container *container) NetIn(hostPort, containerPort uint32) (uint32, uint3
 //
 // Errors:
 // * An error is returned if the NetOut call fails.
-func (container *container) NetOut(netOutRule garden.NetOutRule) error {
+func (container *WindowsContainer) NetOut(netOutRule garden.NetOutRule) error {
 	container.logger.Debug("TODO: NetOut")
 
 	return nil
@@ -447,7 +438,7 @@ func (container *container) NetOut(netOutRule garden.NetOutRule) error {
 //
 // Errors:
 // * TODO.
-func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (garden.Process, error) {
+func (container *WindowsContainer) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (garden.Process, error) {
 
 	if container.hcsContainer == nil {
 		err := container.startContainer()
@@ -576,7 +567,7 @@ func (container *container) Run(spec garden.ProcessSpec, pio garden.ProcessIO) (
 //
 // Errors:
 // * processID does not refer to a running process.
-func (container *container) Attach(processID string, io garden.ProcessIO) (garden.Process, error) {
+func (container *WindowsContainer) Attach(processID string, io garden.ProcessIO) (garden.Process, error) {
 	pid, err := strconv.Atoi(processID)
 	if err != nil {
 		return nil, err
@@ -588,7 +579,7 @@ func (container *container) Attach(processID string, io garden.ProcessIO) (garde
 }
 
 // Metrics returns the current set of metrics for a container
-func (container *container) Metrics() (garden.Metrics, error) {
+func (container *WindowsContainer) Metrics() (garden.Metrics, error) {
 	container.logger.Debug("TODO: Metrics")
 	return garden.Metrics{
 		MemoryStat: garden.ContainerMemoryStat{},
@@ -598,7 +589,7 @@ func (container *container) Metrics() (garden.Metrics, error) {
 }
 
 // Properties returns the current set of properties
-func (container *container) Properties() (garden.Properties, error) {
+func (container *WindowsContainer) Properties() (garden.Properties, error) {
 	container.propertiesMutex.RLock()
 	defer container.propertiesMutex.RUnlock()
 
@@ -609,7 +600,7 @@ func (container *container) Properties() (garden.Properties, error) {
 //
 // Errors:
 // * When the property does not exist on the container.
-func (container *container) Property(name string) (string, error) {
+func (container *WindowsContainer) Property(name string) (string, error) {
 	container.propertiesMutex.RLock()
 	defer container.propertiesMutex.RUnlock()
 
@@ -625,7 +616,7 @@ func (container *container) Property(name string) (string, error) {
 //
 // Errors:
 // * None.
-func (container *container) SetProperty(name string, value string) error {
+func (container *WindowsContainer) SetProperty(name string, value string) error {
 	container.propertiesMutex.Lock()
 	defer container.propertiesMutex.Unlock()
 
@@ -645,7 +636,7 @@ func (container *container) SetProperty(name string, value string) error {
 //
 // Errors:
 // * None.
-func (container *container) RemoveProperty(name string) error {
+func (container *WindowsContainer) RemoveProperty(name string) error {
 	container.propertiesMutex.Lock()
 	defer container.propertiesMutex.Unlock()
 
@@ -658,7 +649,7 @@ func (container *container) RemoveProperty(name string) error {
 	return nil
 }
 
-func (container *container) SetGraceTime(graceTime time.Duration) error {
+func (container *WindowsContainer) SetGraceTime(graceTime time.Duration) error {
 	// TODO: not implemented
 
 	return nil
@@ -680,12 +671,12 @@ func freeTcp4Port() int {
 // https://github.com/docker/docker/blob/master/daemon/graphdriver/windows/windows.go
 // *************************************************************************
 
-func (c *container) dir(id string) string {
+func (c *WindowsContainer) dir(id string) string {
 	return filepath.Join(c.driverInfo.HomeDir, filepath.Base(id))
 }
 
 // Get returns the rootfs path for the id. This will mount the dir at it's given path
-func (c *container) getMountPathForLayer(rId string, layerChain []string) (string, error) {
+func (c *WindowsContainer) getMountPathForLayer(rId string, layerChain []string) (string, error) {
 	var dir string
 
 	if c.active == 0 {
@@ -721,7 +712,7 @@ func (c *container) getMountPathForLayer(rId string, layerChain []string) (strin
 	return dir, nil
 }
 
-func (c *container) getComputeSystemConfiguration() (*hcsshim.ContainerConfig, error) {
+func (c *WindowsContainer) getComputeSystemConfiguration() (*hcsshim.ContainerConfig, error) {
 	layerFolderPath := c.dir(c.id)
 
 	// TODO: investigate further when IgnoreFlushesDuringBoot should be false
@@ -779,7 +770,7 @@ func (c *container) getComputeSystemConfiguration() (*hcsshim.ContainerConfig, e
 	return cu, nil
 }
 
-func (c *container) createNatNetworkEndpoint() error {
+func (c *WindowsContainer) createNatNetworkEndpoint() error {
 	hcsNets, err := hcsshim.HNSListNetworkRequest("GET", "", "")
 	if err != nil {
 		return err
@@ -837,7 +828,7 @@ func (c *container) createNatNetworkEndpoint() error {
 	return nil
 }
 
-func (c *container) startContainer() error {
+func (c *WindowsContainer) startContainer() error {
 	c.startMutex.Lock()
 	defer c.startMutex.Unlock()
 
@@ -855,10 +846,9 @@ func (c *container) startContainer() error {
 			return err
 		}
 
-		c.logger.Info(fmt.Sprintf("HCS create config", lager.Data{"HCSContainerConfig": configuration}))
-
 		// Create a compute system.
 		// This is our container.
+		c.logger.Info(fmt.Sprintf("HCS create container", lager.Data{"HCSContainerConfig": configuration}))
 		hcsContainer, err := hcsshim.CreateContainer(c.id, configuration)
 		if err != nil {
 			return err
@@ -866,6 +856,7 @@ func (c *container) startContainer() error {
 		c.hcsContainer = hcsContainer
 
 		// Start the container
+		c.logger.Info(fmt.Sprintf("HCS start container"))
 		err = c.hcsContainer.Start()
 		if err != nil {
 			return err
@@ -875,7 +866,7 @@ func (c *container) startContainer() error {
 	return nil
 }
 
-func (c *container) getContainerIp() (string, error) {
+func (c *WindowsContainer) getContainerIp() (string, error) {
 
 	// TODO: this is a very inefficient and bad workaround to get the IP
 	// of the container.
