@@ -322,21 +322,9 @@ func (container *WindowsContainer) StreamOut(spec garden.StreamOutSpec) (io.Read
 	return tarReaderPipe, nil
 }
 
-// Limits the network bandwidth for a container.
-func (container *WindowsContainer) LimitBandwidth(limits garden.BandwidthLimits) error {
-	container.logger.Debug("TODO: LimitBandwidth")
-	return nil
-}
-
 func (container *WindowsContainer) CurrentBandwidthLimits() (garden.BandwidthLimits, error) {
 	container.logger.Debug("WC: CurrentBandwidthLimits")
 	return garden.BandwidthLimits{}, nil
-}
-
-// Limits the CPU shares for a container.
-func (container *WindowsContainer) LimitCPU(limits garden.CPULimits) error {
-	container.logger.Debug("TODO: LimitCPU")
-	return nil
 }
 
 func (container *WindowsContainer) CurrentCPULimits() (garden.CPULimits, error) {
@@ -344,32 +332,9 @@ func (container *WindowsContainer) CurrentCPULimits() (garden.CPULimits, error) 
 	return garden.CPULimits{}, nil
 }
 
-// Limits the disk usage for a container.
-//
-// The disk limits that are set by this command only have effect for the container's unprivileged user.
-// Files/directories created by its privileged user are not subject to these limits.
-//
-// TODO: explain how disk management works.
-func (container *WindowsContainer) LimitDisk(limits garden.DiskLimits) error {
-	container.logger.Debug("TODO: LimitDisk")
-	return nil
-}
-
 func (container *WindowsContainer) CurrentDiskLimits() (garden.DiskLimits, error) {
 	container.logger.Debug("WC: CurrentDiskLimits")
 	return garden.DiskLimits{}, nil
-}
-
-// Limits the memory usage for a container.
-//
-// The limit applies to all process in the container. When the limit is
-// exceeded, the container will be automatically stopped.
-//
-// Errors:
-// * The kernel does not support setting memory.memsw.limit_in_bytes.
-func (container *WindowsContainer) LimitMemory(limits garden.MemoryLimits) error {
-	container.logger.Debug("TODO: LimitMemory")
-	return nil
 }
 
 func (container *WindowsContainer) CurrentMemoryLimits() (garden.MemoryLimits, error) {
@@ -465,9 +430,6 @@ func (container *WindowsContainer) Run(spec garden.ProcessSpec, pio garden.Proce
 			concatArgs = concatArgs + " " + vp
 		}
 	}
-
-	fmt.Println(spec.Args)  // DEBUG
-	fmt.Println(concatArgs) // DEBUG
 
 	executablePath := spec.Path
 	if executablePath[1] != ':' {
