@@ -582,9 +582,10 @@ func (container *WindowsContainer) Attach(processID string, io garden.ProcessIO)
 func (container *WindowsContainer) Metrics() (garden.Metrics, error) {
 	container.logger.Debug("TODO: Metrics")
 	return garden.Metrics{
-		MemoryStat: garden.ContainerMemoryStat{},
-		CPUStat:    garden.ContainerCPUStat{},
-		DiskStat:   garden.ContainerDiskStat{},
+		MemoryStat:  garden.ContainerMemoryStat{},
+		CPUStat:     garden.ContainerCPUStat{},
+		DiskStat:    garden.ContainerDiskStat{},
+		NetworkStat: garden.ContainerNetworkStat{},
 	}, nil
 }
 

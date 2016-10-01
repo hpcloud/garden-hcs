@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"strconv"
 	"sync"
 	"time"
 
@@ -15,6 +14,8 @@ import (
 )
 
 type windowsContainerBackend struct {
+	garden.Backend
+
 	containerRootPath string
 	hostIP            string
 
@@ -167,11 +168,21 @@ func (windowsContainerBackend *windowsContainerBackend) BulkInfo(handles []strin
 
 	result := make(map[string]garden.ContainerInfoEntry)
 
-	for i := 0; i < len(handles); i++ {
-		handle := handles[i]
-
+	for _, handle := range handles {
+		var err error
 		cont, err := windowsContainerBackend.Lookup(handle)
 
+		if err == nil {
+			contInfo, err := cont.Info()
+
+			if err == nil {
+				result[handle] = garden.ContainerInfoEntry{
+					Info: contInfo,
+					Err:  nil,
+				}
+			}
+		}
+
 		if err != nil {
 			result[handle] = garden.ContainerInfoEntry{
 				Info: garden.ContainerInfo{},
@@ -179,28 +190,6 @@ func (windowsContainerBackend *windowsContainerBackend) BulkInfo(handles []strin
 					Err: err,
 				},
 			}
-			continue
-		}
-
-		if cont == nil {
-			continue
-		}
-
-		contInfo, err := cont.Info()
-
-		if err != nil {
-			result[handle] = garden.ContainerInfoEntry{
-				Info: garden.ContainerInfo{},
-				Err: &garden.Error{
-					Err: err,
-				},
-			}
-			continue
-		}
-
-		result[handle] = garden.ContainerInfoEntry{
-			Info: contInfo,
-			Err:  nil,
 		}
 	}
 
@@ -211,23 +200,32 @@ func (windowsContainerBackend *windowsContainerBackend) BulkInfo(handles []strin
 func (windowsContainerBackend *windowsContainerBackend) BulkMetrics(handles []string) (map[string]garden.ContainerMetricsEntry, error) {
 	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.BulkMetrics")
 
-	// TODO: not implemented
-	return map[string]garden.ContainerMetricsEntry{}, nil
-}
+	result := make(map[string]garden.ContainerMetricsEntry)
 
-func generateContainerIDs(ids chan<- string) string {
-	for containerNum := time.Now().UnixNano(); ; containerNum++ {
-		containerID := []byte{}
+	for _, handle := range handles {
+		var err error
+		cont, err := windowsContainerBackend.Lookup(handle)
 
-		var i uint
-		for i = 0; i < 11; i++ {
-			containerID = strconv.AppendInt(
-				containerID,
-				(containerNum>>(55-(i+1)*5))&31,
-				32,
-			)
+		if err == nil {
+			metrics, err := cont.Metrics()
+
+			if err == nil {
+				result[handle] = garden.ContainerMetricsEntry{
+					Metrics: metrics,
+					Err:     nil,
+				}
+			}
 		}
 
-		ids <- string(containerID)
+		if err != nil {
+			result[handle] = garden.ContainerMetricsEntry{
+				Metrics: garden.Metrics{},
+				Err: &garden.Error{
+					Err: err,
+				},
+			}
+		}
 	}
+
+	return result, nil
 }
