@@ -236,13 +236,18 @@ func (container *WindowsContainer) Info() (garden.ContainerInfo, error) {
 
 	properties, _ := container.Properties()
 
+	processIDs := []string{}
+	for _, pt := range container.pids {
+		processIDs = append(processIDs, pt.ID())
+	}
+
 	result := garden.ContainerInfo{
 		State:       "active",
 		ExternalIP:  container.hostIP,
 		HostIP:      container.hostIP,
 		ContainerIP: container.containerIp,
 		Events:      []string{},
-		ProcessIDs:  []string{},
+		ProcessIDs:  processIDs,
 		Properties:  properties,
 		MappedPorts: container.portMappings,
 	}
@@ -522,6 +527,8 @@ func (container *WindowsContainer) Run(spec garden.ProcessSpec, pio garden.Proce
 		"PID": pt.ID(),
 	})
 
+	container.pids[pid] = pt
+
 	return pt, nil
 }
 
@@ -535,9 +542,9 @@ func (container *WindowsContainer) Attach(processID string, io garden.ProcessIO)
 		return nil, err
 	}
 
-	cmd := container.pids[pid]
+	pt := container.pids[pid]
 
-	return cmd, nil
+	return pt, nil
 }
 
 // Metrics returns the current set of metrics for a container
@@ -625,14 +632,6 @@ func freeTcp4Port() int {
 	ret, _ := strconv.ParseUint(freePort, 10, 32)
 	return int(ret)
 }
-
-// *************************************************************************
-// This is where we start implementing things we need for windows containers
-// Based on:
-// https://github.com/docker/docker/blob/master/daemon/execdriver/windows/windows.go
-// https://github.com/docker/docker/blob/master/daemon/execdriver/windows/run.go
-// https://github.com/docker/docker/blob/master/daemon/graphdriver/windows/windows.go
-// *************************************************************************
 
 func (c *WindowsContainer) dir(id string) string {
 	return filepath.Join(c.driverInfo.HomeDir, filepath.Base(id))

@@ -139,13 +139,23 @@ func (windowsContainerBackend *windowsContainerBackend) Destroy(handle string) e
 	return nil
 }
 
-func (windowsContainerBackend *windowsContainerBackend) Containers(garden.Properties) (containers []garden.Container, err error) {
-	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.Containers")
+func (windowsContainerBackend *windowsContainerBackend) Containers(filterProperties garden.Properties) (containers []garden.Container, err error) {
+	windowsContainerBackend.logger.Debug("WCB: windowsContainerBackend.Containers", lager.Data{"filterProperties": filterProperties})
 	windowsContainerBackend.containersMutex.RLock()
 	defer windowsContainerBackend.containersMutex.RUnlock()
 
-	for _, container := range windowsContainerBackend.containers {
-		containers = append(containers, container)
+	for _, c := range windowsContainerBackend.containers {
+		allPropertiesMatch := true
+		for filterKey, filterValue := range filterProperties {
+			if actualValue, err := c.Property(filterKey); err != nil || actualValue != filterValue {
+				allPropertiesMatch = false
+				break
+			}
+		}
+
+		if allPropertiesMatch {
+			containers = append(containers, c)
+		}
 	}
 
 	return containers, nil
