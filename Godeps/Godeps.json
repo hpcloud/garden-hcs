@@ -9,38 +9,38 @@
 		},
 		{
 			"ImportPath": "code.cloudfoundry.org/garden",
-			"Comment": "go-wshd-842-ga13ae02",
-			"Rev": "a13ae028cd3219c013713b9f3f85805ea9b85f60"
+			"Comment": "go-wshd-844-gb923b59",
+			"Rev": "b923b59015a28d25be0d0cca98550f024d3eca46"
 		},
 		{
 			"ImportPath": "code.cloudfoundry.org/garden/routes",
-			"Comment": "go-wshd-842-ga13ae02",
-			"Rev": "a13ae028cd3219c013713b9f3f85805ea9b85f60"
+			"Comment": "go-wshd-844-gb923b59",
+			"Rev": "b923b59015a28d25be0d0cca98550f024d3eca46"
 		},
 		{
 			"ImportPath": "code.cloudfoundry.org/garden/server",
-			"Comment": "go-wshd-842-ga13ae02",
-			"Rev": "a13ae028cd3219c013713b9f3f85805ea9b85f60"
+			"Comment": "go-wshd-844-gb923b59",
+			"Rev": "b923b59015a28d25be0d0cca98550f024d3eca46"
 		},
 		{
 			"ImportPath": "code.cloudfoundry.org/garden/server/bomberman",
-			"Comment": "go-wshd-842-ga13ae02",
-			"Rev": "a13ae028cd3219c013713b9f3f85805ea9b85f60"
+			"Comment": "go-wshd-844-gb923b59",
+			"Rev": "b923b59015a28d25be0d0cca98550f024d3eca46"
 		},
 		{
 			"ImportPath": "code.cloudfoundry.org/garden/server/streamer",
-			"Comment": "go-wshd-842-ga13ae02",
-			"Rev": "a13ae028cd3219c013713b9f3f85805ea9b85f60"
+			"Comment": "go-wshd-844-gb923b59",
+			"Rev": "b923b59015a28d25be0d0cca98550f024d3eca46"
 		},
 		{
 			"ImportPath": "code.cloudfoundry.org/garden/server/timebomb",
-			"Comment": "go-wshd-842-ga13ae02",
-			"Rev": "a13ae028cd3219c013713b9f3f85805ea9b85f60"
+			"Comment": "go-wshd-844-gb923b59",
+			"Rev": "b923b59015a28d25be0d0cca98550f024d3eca46"
 		},
 		{
 			"ImportPath": "code.cloudfoundry.org/garden/transport",
-			"Comment": "go-wshd-842-ga13ae02",
-			"Rev": "a13ae028cd3219c013713b9f3f85805ea9b85f60"
+			"Comment": "go-wshd-844-gb923b59",
+			"Rev": "b923b59015a28d25be0d0cca98550f024d3eca46"
 		},
 		{
 			"ImportPath": "code.cloudfoundry.org/lager",
@@ -53,8 +53,8 @@
 		},
 		{
 			"ImportPath": "github.com/Microsoft/hcsshim",
-			"Comment": "v0.4.3-10-g7172c87",
-			"Rev": "7172c871ab738ab8318e2b9832923a5d736d156a"
+			"Comment": "v0.5.0-8-g7fc3921",
+			"Rev": "7fc39210ba159ce923c7a22461c0b4efc53a8a9d"
 		},
 		{
 			"ImportPath": "github.com/Sirupsen/logrus",
@@ -67,13 +67,13 @@
 		},
 		{
 			"ImportPath": "github.com/docker/docker/pkg/random",
-			"Comment": "docs-v1.12.0-rc4-2016-07-15-1662-gfd1037b",
-			"Rev": "fd1037b4325c1ae5b2e68d6f39ee0cd58a0a7d48"
+			"Comment": "docs-v1.12.0-rc4-2016-07-15-1886-g86de7c0",
+			"Rev": "86de7c000f5d854051369754ad1769194e8dd5e1"
 		},
 		{
 			"ImportPath": "github.com/docker/docker/pkg/stringid",
-			"Comment": "docs-v1.12.0-rc4-2016-07-15-1662-gfd1037b",
-			"Rev": "fd1037b4325c1ae5b2e68d6f39ee0cd58a0a7d48"
+			"Comment": "docs-v1.12.0-rc4-2016-07-15-1886-g86de7c0",
+			"Rev": "86de7c000f5d854051369754ad1769194e8dd5e1"
 		},
 		{
 			"ImportPath": "github.com/pborman/uuid",
@@ -82,7 +82,8 @@
 		},
 		{
 			"ImportPath": "github.com/tedsuo/rata",
-			"Rev": "b15ebd8bd97ae9202eb00c076d59b2f2824bce37"
+			"Comment": "v1.0.0",
+			"Rev": "0649c23705dfb45a9693b668c4fc1c0666f485d9"
 		},
 		{
 			"ImportPath": "golang.org/x/sys/unix",
