@@ -3,9 +3,10 @@
 ## Requirements
 - Running Bosh Lite - https://github.com/cloudfoundry/bosh-lite
 - Cloud Foundry deployment on Bosh Lite - https://github.com/cloudfoundry/cf-release
-- Diego deployment ( v0.1484.0 ) on Bosh Lite - https://github.com/cloudfoundry/diego-release/tree/develop/examples/bosh-lite
-- Vagrant ( >= 1.8.5) and Virtualbox
-- Add windows2016 to diego lifecycle_bundles: "buildpack/windows2016:windows2016_app_lifecycle/windows2016_app_lifecycle.tgz"
+- Diego deployment ( v0.1486.0 ) on Bosh Lite - https://github.com/cloudfoundry/diego-release/tree/develop/examples/bosh-lite
+- Vagrant ( >= 1.8.6) and Virtualbox
+- Add the [Windows 2016 lifecycle](https://github.com/stefanschneider/windows_app_lifecycle/tree/w2016) to diego lifecycle_bundles: "buildpack/windows2016:windows2016_app_lifecycle/windows2016_app_lifecycle.tgz"
+
 ```
 # Run the following script to change the diego deployment manifest to add the extra windows2016 lifecycle_bundle
 
@@ -48,7 +49,8 @@ EOM
 bosh -n --deployment ~/workspace/diego-release/bosh-lite/deployments/diego.yml deploy
 ```
 
-- Upload the windows2016 lifecycle to "access_z1" bosh job
+- Upload the [Windows 2016 lifecycle build](https://ci.appveyor.com/project/StefanSchneider/windows-app-lifecycle-qc4gr/build/artifacts) to "access_z1" bosh job
+
 ```
 # Use the following script to upload the new lifecycle.
 # N.B. Run this script again if the bosh job is restarted or recreated
@@ -67,6 +69,24 @@ bosh ssh access_z1/0 -- sudo mkdir -p /var/vcap/jobs/file_server/packages/window
 ```
 cf curl /v2/stacks -X POST -d '{"name":"windows2016","description":"Windows Server Core 2016"}'
 ```
+
+## Create a Windows 2016 vagrant box for VirtualBox
+Install VirtualBox, [packer](https://www.packer.io/), get the [Windows Server 2016 Evaluation ISO](https://www.microsoft.com/en-us/evalcenter/evaluate-windows-server-2016)  and download the following packer bundle https://github.com/StefanScherer/packer-windows/tree/b2a7684f75b533091733ae5fb25609af233e1284
+
+To build the vagrant box run the following command from the packer-windows directory:
+```
+packer build --only=virtualbox-iso ^
+ --var 'iso_url=D:/software/14393.0.160715-1616.RS1_RELEASE_SERVER_EVAL_X64FRE_EN-US.ISO' ^
+ ./windows_2016_docker.json
+```
+
+N.B: The build usually takes a couple of hours, depending on your internet connection quality.
+
+After the packer build is finished, add the box to vagrant:
+```
+vagrant box add windows_2016_docker_virtualbox.box   --name windows_2016_docker_virtualbox_rs1_v1
+```
+
 
 ## Usage
 Run `vagrant up` from the dev-box directory and wait for the deployment to complete.

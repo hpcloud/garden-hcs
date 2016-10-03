@@ -1,7 +1,3 @@
 garden-hcs.exe
-/diego/artifacts
 /bin
-/gin-bin
-coverage.xml
-/diego/bin
-diego-installer.exe
+dev-box/.vagrant

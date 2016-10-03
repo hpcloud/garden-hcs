@@ -45,6 +45,8 @@ nssm set GardenHcs AppStdout "C:\garden-stderr.txt"
 Start-Service GardenHcs
 
 echo " "
+echo "To view HCS logs use the following PS command"
+echo ' Get-WinEvent -LogName "Microsoft-Windows-Hyper-V-Compute-Operational" | Format-List -Property TimeCreated, Message'
 echo "Gatden client (gaol) usage example:"
 echo " gaol /t 127.0.0.1:9241 list"
 echo "To run garden manually use the following start script:"
