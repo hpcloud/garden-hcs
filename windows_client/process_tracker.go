@@ -1,4 +1,4 @@
-package prison_client
+package windows_client
 
 import (
 	"strconv"

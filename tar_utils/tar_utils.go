@@ -1,4 +1,4 @@
-package untar
+package tar_utils
 
 import (
 	"archive/tar"
@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 func Untar(tarStream io.Reader, targetDir string) error {
@@ -25,21 +26,21 @@ func Untar(tarStream io.Reader, targetDir string) error {
 
 		// get the individual filename and extract to the target directory
 		filename := header.Name
-		fullFilename := "\\\\?\\" + filepath.Join(targetDir, filename)
 
 		switch header.Typeflag {
 		case tar.TypeDir:
 			// handle directory
-			err = os.MkdirAll(fullFilename, os.FileMode(header.Mode)) // or use 0755 if you prefer
+			err = MkdirAll(targetDir, filename, os.FileMode(header.Mode)) // or use 0755 if you prefer
 
 			if err != nil {
 				return err
 			}
 
 		case tar.TypeReg:
-			fullDirectory := filepath.Dir(fullFilename)
+			fullFilename := filepath.Join(targetDir, filename)
+			dir := filepath.Dir(filename)
 
-			err = os.MkdirAll(fullDirectory, os.FileMode(header.Mode)) // or use 0755 if you prefer
+			err = MkdirAll(targetDir, dir, os.FileMode(header.Mode)) // or use 0755 if you prefer
 
 			if err != nil {
 				return err
@@ -106,7 +107,7 @@ func Tarit(source string, target io.WriteCloser) error {
 				return nil
 			}
 
-			file, err := os.Open("\\\\?\\" + path)
+			file, err := os.Open(path)
 			if err != nil {
 				return err
 			}
@@ -114,4 +115,44 @@ func Tarit(source string, target io.WriteCloser) error {
 			_, err = io.Copy(tarball, file)
 			return err
 		})
+}
+
+func MkdirAll(basePath, targetDir string, fileMode os.FileMode) error {
+	parents := []string{filepath.Clean(targetDir)}
+	prevParent := ""
+
+	for {
+		parent := filepath.Dir(targetDir)
+		if parent == prevParent {
+			break
+		}
+		prevParent = parent
+
+		parents = append(parents, parent)
+		targetDir = parent
+	}
+
+	for i := len(parents) - 1; i >= 0; i-- {
+		fullDirPath := filepath.Join(basePath, parents[i])
+
+		dir, err := os.Stat(fullDirPath)
+		if err == nil {
+			if dir.IsDir() {
+				continue
+			}
+			return &os.PathError{"mkdir", fullDirPath, syscall.ENOTDIR}
+		}
+
+		err = os.Mkdir(fullDirPath, fileMode)
+		if err != nil {
+			// Handle arguments like "foo/." by
+			// double-checking that directory doesn't exist.
+			dir, err1 := os.Lstat(fullDirPath)
+			if err1 != nil || !dir.IsDir() {
+				return err
+			}
+		}
+	}
+
+	return nil
 }

@@ -16,15 +16,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hpcloud/garden-hcs/mountvol"
-	"github.com/hpcloud/garden-hcs/untar"
+	"github.com/hpcloud/garden-hcs/tar_utils"
 	"github.com/hpcloud/garden-hcs/windows_client"
 	"github.com/hpcloud/garden-hcs/windows_containers"
 
 	"code.cloudfoundry.org/garden"
 	"code.cloudfoundry.org/lager"
 	"github.com/Microsoft/hcsshim"
-	"github.com/pborman/uuid"
 )
 
 type WindowsContainerSpec struct {
@@ -49,7 +47,7 @@ type WindowsContainer struct {
 	hcsContainer  hcsshim.Container
 	natEndpointId string
 
-	pids map[int]*prison_client.ProcessTracker
+	pids map[int]*windows_client.ProcessTracker
 
 	hostPort      int
 	containerPort int
@@ -62,13 +60,12 @@ type WindowsContainer struct {
 	propertiesMutex sync.RWMutex
 	driverInfo      hcsshim.DriverInfo
 	active          int
-	virtualSwitch   string
 	layerChain      []string
 	volumeName      string
 	layerFolderPath string
 }
 
-func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger lager.Logger, hostIP string, driverInfo hcsshim.DriverInfo, baseImagePath, virtualSwitch string) (*WindowsContainer, error) {
+func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger lager.Logger, hostIP string, driverInfo hcsshim.DriverInfo, baseImagePath string) (*WindowsContainer, error) {
 	logger.Debug("WC: NewContainer")
 
 	result := &WindowsContainer{
@@ -78,11 +75,10 @@ func NewContainer(id, handle string, containerSpec garden.ContainerSpec, logger 
 		hostIP: hostIP,
 		logger: logger,
 
-		pids:          make(map[int]*prison_client.ProcessTracker),
-		driverInfo:    driverInfo,
-		active:        0,
-		virtualSwitch: virtualSwitch,
-		bindMounts:    containerSpec.BindMounts,
+		pids:       make(map[int]*windows_client.ProcessTracker),
+		driverInfo: driverInfo,
+		active:     0,
+		bindMounts: containerSpec.BindMounts,
 	}
 
 	result.Env = containerSpec.Env
@@ -265,30 +261,14 @@ func (container *WindowsContainer) StreamIn(spec garden.StreamInSpec) error {
 	container.runMutex.Lock()
 	defer container.runMutex.Unlock()
 
-	// Get container directory
-	layerFolder := container.dir(container.id)
-
-	// Generate a temporary directory path
-	tempFolder := layerFolder + "-" + uuid.New()
-
-	// Mount the volume
-	err := mountvol.MountVolume(container.volumeName, tempFolder)
-	if err != nil {
-		return err
-	}
-
-	// Dismount when we're done
-	defer func() {
-		mountvol.UnmountVolume(tempFolder)
-	}()
-
 	// Write the tar stream to the directory
-	outDir := filepath.Join(tempFolder, spec.Path)
-	err = os.MkdirAll(outDir, 0755)
+	outDir := filepath.Join(container.volumeName, spec.Path)
+	err := tar_utils.MkdirAll(container.volumeName, spec.Path, os.FileMode(0755))
 	if err != nil {
 		return err
 	}
-	return untar.Untar(spec.TarStream, outDir)
+
+	return tar_utils.Untar(spec.TarStream, outDir)
 }
 
 // StreamOut streams a file out of a container.
@@ -304,24 +284,11 @@ func (container *WindowsContainer) StreamOut(spec garden.StreamOutSpec) (io.Read
 
 	tarReaderPipe, tarWriterPipe := io.Pipe()
 
-	// Get container directory
-	layerFolder := container.dir(container.id)
-
-	// Generate a temporary directory path
-	tempFolder := layerFolder + "-" + uuid.New()
-
-	// Mount the volume
-	err := mountvol.MountVolume(container.volumeName, tempFolder)
-	if err != nil {
-		return nil, err
-	}
-
 	// Write the tar stream to the directory
-	sourceDir := filepath.Join(tempFolder, spec.Path)
+	sourceDir := filepath.Join(container.volumeName, spec.Path)
 
 	go func() {
-		untar.Tarit(sourceDir, tarWriterPipe)
-		mountvol.UnmountVolume(tempFolder)
+		tar_utils.Tarit(sourceDir, tarWriterPipe)
 	}()
 
 	return tarReaderPipe, nil
@@ -437,7 +404,7 @@ func (container *WindowsContainer) Run(spec garden.ProcessSpec, pio garden.Proce
 	}
 
 	executablePath := spec.Path
-	if executablePath[1] != ':' {
+	if filepath.IsAbs(executablePath) && filepath.VolumeName(executablePath) == "" {
 		executablePath = "C:" + filepath.FromSlash(executablePath)
 	}
 
@@ -521,7 +488,7 @@ func (container *WindowsContainer) Run(spec garden.ProcessSpec, pio garden.Proce
 	}()
 
 	// Create a new process tracker for the process we've just created
-	pt := prison_client.NewProcessTracker(container.id, uint32(pid), hcsProcess, container.driverInfo, container.logger)
+	pt := windows_client.NewProcessTracker(container.id, uint32(pid), hcsProcess, container.driverInfo, container.logger)
 
 	container.logger.Debug("Container run created new process.", lager.Data{
 		"PID": pt.ID(),

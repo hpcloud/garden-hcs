@@ -2,10 +2,12 @@ package container
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -15,10 +17,28 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/cloudfoundry-incubator/garden-windows/windows_containers"
+	"github.com/hpcloud/garden-hcs/windows_containers"
 )
 
+var windowsServerCodeImagePath string
+
 func TestMain(m *testing.M) {
+	cmd := exec.Command("docker", "inspect", "microsoft/windowsservercore")
+	imageJson, err := cmd.Output()
+	if err != nil {
+		panic(err)
+	}
+	windowsImage := []map[string]interface{}{}
+	err = json.Unmarshal(imageJson, &windowsImage)
+	if err != nil {
+		panic(err)
+	}
+
+	graphDriver := windowsImage[0]["GraphDriver"].(map[string]interface{})
+	graphDriverData := graphDriver["Data"].(map[string]interface{})
+	graphDriverDataDir := graphDriverData["dir"].(string)
+	windowsServerCodeImagePath = graphDriverDataDir
+
 	cflager.AddFlags(flag.CommandLine)
 
 	retCode := m.Run()
@@ -35,7 +55,6 @@ func TestCreateContainer(t *testing.T) {
 	handle := id
 	rootPath := "WindowsServerCore:dummy"
 	hostIP := "127.0.0.1"
-	virtualSwitch := "Virtual Switch"
 	driverInfo := windows_containers.NewDriverInfo("c:\\garden-windows\\tests")
 	properties := garden.Properties{}
 
@@ -45,7 +64,7 @@ func TestCreateContainer(t *testing.T) {
 		RootFSPath: rootPath,
 	}
 
-	container, err := NewContainer(id, handle, containerSpec, logger, hostIP, driverInfo, virtualSwitch)
+	container, err := NewContainer(id, handle, containerSpec, logger, hostIP, driverInfo, windowsServerCodeImagePath)
 	defer container.Stop(true)
 
 	assert.Nil(err)
@@ -60,7 +79,6 @@ func TestRunInContainer(t *testing.T) {
 	handle := id
 	rootPath := "WindowsServerCore:dummy"
 	hostIP := "127.0.0.1"
-	virtualSwitch := "Virtual Switch"
 	driverInfo := windows_containers.NewDriverInfo("c:\\garden-windows\\tests")
 	properties := garden.Properties{}
 
@@ -70,7 +88,7 @@ func TestRunInContainer(t *testing.T) {
 		RootFSPath: rootPath,
 	}
 
-	container, err := NewContainer(id, handle, containerSpec, logger, hostIP, driverInfo, virtualSwitch)
+	container, err := NewContainer(id, handle, containerSpec, logger, hostIP, driverInfo, windowsServerCodeImagePath)
 	defer container.Stop(true)
 
 	assert.Nil(err)
@@ -89,7 +107,7 @@ func TestRunInContainer(t *testing.T) {
 	}
 
 	pt, err := container.Run(processSpec, pio)
-	assert.Nil(err)
+	assert.NoError(err)
 
 	exitCode, err := pt.Wait()
 
@@ -106,7 +124,6 @@ func TestRunInContainerLinuxPaths(t *testing.T) {
 	handle := id
 	rootPath := "WindowsServerCore:dummy"
 	hostIP := "127.0.0.1"
-	virtualSwitch := "Virtual Switch"
 	driverInfo := windows_containers.NewDriverInfo("c:\\garden-windows\\tests")
 	properties := garden.Properties{}
 
@@ -116,7 +133,7 @@ func TestRunInContainerLinuxPaths(t *testing.T) {
 		RootFSPath: rootPath,
 	}
 
-	container, err := NewContainer(id, handle, containerSpec, logger, hostIP, driverInfo, virtualSwitch)
+	container, err := NewContainer(id, handle, containerSpec, logger, hostIP, driverInfo, windowsServerCodeImagePath)
 	defer container.Stop(true)
 
 	assert.Nil(err)
@@ -152,7 +169,6 @@ func TestRunInContainerWithOutput(t *testing.T) {
 	handle := id
 	rootPath := "WindowsServerCore:dummy"
 	hostIP := "127.0.0.1"
-	virtualSwitch := "Virtual Switch"
 	driverInfo := windows_containers.NewDriverInfo("c:\\garden-windows\\tests")
 	properties := garden.Properties{}
 
@@ -162,7 +178,7 @@ func TestRunInContainerWithOutput(t *testing.T) {
 		RootFSPath: rootPath,
 	}
 
-	container, err := NewContainer(id, handle, containerSpec, logger, hostIP, driverInfo, virtualSwitch)
+	container, err := NewContainer(id, handle, containerSpec, logger, hostIP, driverInfo, windowsServerCodeImagePath)
 	defer container.Stop(true)
 
 	assert.Nil(err)
@@ -203,7 +219,6 @@ func TestRunInContainerEnv(t *testing.T) {
 	handle := id
 	rootPath := "WindowsServerCore:dummy"
 	hostIP := "127.0.0.1"
-	virtualSwitch := "Virtual Switch"
 	driverInfo := windows_containers.NewDriverInfo("c:\\garden-windows\\tests")
 	properties := garden.Properties{}
 
@@ -214,7 +229,7 @@ func TestRunInContainerEnv(t *testing.T) {
 		Env:        []string{"INSTANCE_INDEX=0"},
 	}
 
-	container, err := NewContainer(id, handle, containerSpec, logger, hostIP, driverInfo, virtualSwitch)
+	container, err := NewContainer(id, handle, containerSpec, logger, hostIP, driverInfo, windowsServerCodeImagePath)
 	defer container.Stop(true)
 
 	assert.Nil(err)
@@ -255,7 +270,6 @@ func TestRunInContainerWithNetwork(t *testing.T) {
 	handle := id
 	rootPath := "WindowsServerCore:dummy"
 	hostIP := "127.0.0.1"
-	virtualSwitch := "Virtual Switch"
 	driverInfo := windows_containers.NewDriverInfo("c:\\garden-windows\\tests")
 	properties := garden.Properties{}
 
@@ -265,7 +279,7 @@ func TestRunInContainerWithNetwork(t *testing.T) {
 		RootFSPath: rootPath,
 	}
 
-	container, err := NewContainer(id, handle, containerSpec, logger, hostIP, driverInfo, virtualSwitch)
+	container, err := NewContainer(id, handle, containerSpec, logger, hostIP, driverInfo, windowsServerCodeImagePath)
 	defer container.Stop(true)
 
 	assert.Nil(err)
@@ -273,10 +287,9 @@ func TestRunInContainerWithNetwork(t *testing.T) {
 	processSpec := garden.ProcessSpec{
 		Path: "powershell.exe",
 		Args: []string{
-			fmt.Sprintf(
-				"-command \"$l = New-Object System.Net.HttpListener ; $l.Prefixes.Add('http://%s:8080/'); $l.Start(); while ($l.IsListening) { $c = $l.GetContext() ; $q = $c.Request; Write-Output (date); $r = $c.Response ; $m = [System.Text.ASCIIEncoding]::ASCII.GetBytes(((gci -path env:*) | Out-String)); $r.ContentLength64 = $m.Length ; $r.OutputStream.Write($m, 0, $m.Length) ; $r.OutputStream.Dispose(); }\"",
-				container.containerIp,
-			)},
+			"-command",
+			"$l = New-Object System.Net.HttpListener ; $l.Prefixes.Add('http://*:8080/'); $l.Start(); while ($l.IsListening) { $c = $l.GetContext() ; $q = $c.Request; Write-Output (date); $r = $c.Response ; $m = [System.Text.ASCIIEncoding]::ASCII.GetBytes(((gci -path env:*) | Out-String)); $r.ContentLength64 = $m.Length ; $r.OutputStream.Write($m, 0, $m.Length) ; $r.OutputStream.Dispose(); }",
+		},
 		Env: []string{},
 		Dir: "c:\\",
 	}
@@ -312,7 +325,6 @@ func TestRunInContainerWithStreamIn(t *testing.T) {
 	handle := id
 	rootPath := "WindowsServerCore:dummy"
 	hostIP := "127.0.0.1"
-	virtualSwitch := "Virtual Switch"
 	driverInfo := windows_containers.NewDriverInfo("c:\\garden-windows\\tests")
 	properties := garden.Properties{}
 
@@ -322,7 +334,7 @@ func TestRunInContainerWithStreamIn(t *testing.T) {
 		RootFSPath: rootPath,
 	}
 
-	container, err := NewContainer(id, handle, containerSpec, logger, hostIP, driverInfo, virtualSwitch)
+	container, err := NewContainer(id, handle, containerSpec, logger, hostIP, driverInfo, windowsServerCodeImagePath)
 	defer container.Stop(true)
 	assert.Nil(err)
 
@@ -334,7 +346,7 @@ func TestRunInContainerWithStreamIn(t *testing.T) {
 	assert.Nil(err)
 
 	streamInSpec := garden.StreamInSpec{
-		Path:      ".\\testfiles",
+		Path:      "\\testfiles",
 		TarStream: tarStream,
 	}
 
@@ -343,7 +355,7 @@ func TestRunInContainerWithStreamIn(t *testing.T) {
 
 	processSpec := garden.ProcessSpec{
 		Path: "cmd",
-		Args: []string{"/c dir"},
+		Args: []string{"/c", "dir"},
 		Env:  []string{},
 		Dir:  "c:\\testfiles",
 	}

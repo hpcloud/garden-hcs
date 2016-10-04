@@ -30,7 +30,7 @@ type windowsContainerBackend struct {
 	virtualSwitchName string
 }
 
-func NewWindowsContainerBackend(containerRootPath, baseImagePath, virtualSwitchName string, logger lager.Logger, hostIP string) (*windowsContainerBackend, error) {
+func NewWindowsContainerBackend(containerRootPath, baseImagePath string, logger lager.Logger, hostIP string) (*windowsContainerBackend, error) {
 	logger.Debug("WCB: windowsContainerBackend.NewWindowsContainerBackend")
 
 	//	containerIDs := make(chan string)
@@ -46,9 +46,8 @@ func NewWindowsContainerBackend(containerRootPath, baseImagePath, virtualSwitchN
 		containers:      make(map[string]*container.WindowsContainer),
 		containersMutex: new(sync.RWMutex),
 
-		virtualSwitchName: virtualSwitchName,
-		driverInfo:        windows_containers.NewDriverInfo(baseImagePath),
-		baseImagePath:     baseImagePath,
+		driverInfo:    windows_containers.NewDriverInfo(baseImagePath),
+		baseImagePath: baseImagePath,
 	}, nil
 }
 
@@ -108,7 +107,6 @@ func (windowsContainerBackend *windowsContainerBackend) Create(containerSpec gar
 		windowsContainerBackend.hostIP,
 		windowsContainerBackend.driverInfo,
 		windowsContainerBackend.baseImagePath,
-		windowsContainerBackend.virtualSwitchName,
 	)
 
 	if err != nil {

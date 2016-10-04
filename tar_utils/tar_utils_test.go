@@ -1,4 +1,4 @@
-package untar
+package tar_utils
 
 import (
 	"io/ioutil"
