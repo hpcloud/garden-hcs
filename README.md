@@ -1,10 +1,14 @@
 # Garden HCS (Host Compute Service)
 
-Windows 2016 Containers backend for [Garden](https://github.com/cloudfoundry-incubator/garden).
+Windows 2016 Containers implementation based on [Microsoft Host Compute Service Shim](https://github.com/Microsoft/hcsshim) for Cloud Foundry [Garden](https://github.com/cloudfoundry/garden).
+
+## Requirements
+
+* [golang 1.7.x](https://golang.org/dl/)
+* [gcc from mingw-w64](https://sourceforge.net/projects/mingw-w64)
+* Windows 2016 Server 1607 (10.0.14393) or newer.
 
 ## Build
-
-Make sure you have [golang 1.7.x](https://golang.org/dl/) and [gcc from mingw-w64](https://sourceforge.net/projects/mingw-w64) installed.
 
 To build garden-hcs run `go build` or `go get github.com/hpcloud/garden-hcs`.
 
