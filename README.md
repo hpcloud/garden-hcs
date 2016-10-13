@@ -36,7 +36,7 @@ Example:
 
 `Invoke-WebRequest  -UseBasicParsing http://localhost:9241/capacity`
 
-Another method is to use the [Garden client "goal"](https://github.com/contraband/gaol) adapted for windows. To install gaol for Windows use: `go get github.com/stefanschneider/gaol`
+Another method is to use the [Garden client "gaol"](https://github.com/contraband/gaol) adapted for windows. To install gaol for Windows use: `go get github.com/stefanschneider/gaol`
 
 Gaol usage sample:
 
